@@ -17,7 +17,7 @@ credentials = ServiceAccountCredentials.from_json_keyfile_dict(
 gc = gspread.authorize(credentials)
 
 # Use full URL to open shared sheet
-SHEET_URL = "https://docs.google.com/spreadsheets/d/PASTE-YOUR-SHEET-ID-HERE"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 sheet = gc.open_by_url(SHEET_URL).sheet1
 
 # Load data into DataFrame
