@@ -45,7 +45,7 @@ if st.button("Sign up"):
 if st.session_state.signup_active and st.session_state.name:
     for i, row in df.iterrows():
         with st.container():
-            flight_label = f"{row['CARR (IATA)']} | {row['AIRCRAFT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']}"
+            flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']}"
             has_observers = bool(row["Observers"])
 
             if has_observers:
