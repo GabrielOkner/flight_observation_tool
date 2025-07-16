@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
+import pytz
 
 st.set_page_config(page_title="Flight Observer", layout="centered")
 st.title("Flight Observation Sign Up!")
@@ -116,7 +117,23 @@ if st.session_state.signup_active and st.session_state.name:
         st.session_state.signup_active = False
         st.rerun()
 
-# Final table display
 st.markdown("---")
-st.subheader("Today's Flights")
-st.dataframe(df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP", "Observers"]])
+st.subheader("Today's Remaining Flights")
+
+def parse_time(t):
+    return datetime.strptime(t.strip(), "%H:%M").time()
+
+if "Parsed Time" not in df.columns:
+    df["Parsed Time"] = df["SCHED DEP"].apply(parse_time)
+
+central = pytz.timezone("America/Denver")
+now_ct = datetime.now(central).replace(second=0, microsecond=0).time()
+filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
+
+if not filtered_df.empty:
+    st.dataframe(filtered_df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP", "Observers"]])
+else:
+    st.info("No upcoming flights found.")
+
+
+
