@@ -6,16 +6,19 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="Flight Observer", layout="centered")
 st.title("Flight Observation Sign Up!")
 
-# Authorize Google Sheets
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# Authorize Google Sheets with updated scopes
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(
     st.secrets["google_service_account"], scopes=scope
 )
 gc = gspread.authorize(credentials)
 
-# Open sheet
-SHEET_NAME = "7_16_flights"
-sheet = gc.open(SHEET_NAME).sheet1
+# Use full URL to open shared sheet
+SHEET_URL = "https://docs.google.com/spreadsheets/d/PASTE-YOUR-SHEET-ID-HERE"
+sheet = gc.open_by_url(SHEET_URL).sheet1
 
 # Load data into DataFrame
 data = sheet.get_all_records()
@@ -25,6 +28,7 @@ df = pd.DataFrame(data)
 name = st.text_input("Enter your name:")
 signup_clicked = st.button("Sign up")
 
+# Sign-up and selection UI
 if signup_clicked and name:
     st.success(f"Hi {name}, please select the flights you'd like to observe!")
 
@@ -45,7 +49,7 @@ if signup_clicked and name:
                 else:
                     st.info("You already signed up for this flight.")
 
-# Display updated table
+# Show table with current observers
 st.markdown("---")
 st.subheader("Today's Flights")
 st.dataframe(df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP", "Observers"]])
