@@ -17,7 +17,7 @@ credentials = ServiceAccountCredentials.from_json_keyfile_dict(
 )
 gc = gspread.authorize(credentials)
 
-# Load sheet
+# Load sheet with flights
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 sheet = gc.open_by_url(SHEET_URL).sheet1
 data = sheet.get_all_records()
@@ -46,8 +46,15 @@ if st.session_state.signup_active and st.session_state.name:
     for i, row in df.iterrows():
         with st.container():
             flight_label = f"{row['CARR (IATA)']} | {row['AIRCRAFT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']}"
+            has_observers = bool(row["Observers"])
+
+            if has_observers:
+                styled_label = f"<span style='color:red; font-weight:bold;'>{flight_label}</span>"
+            else:
+                styled_label = f"<span style='font-weight:bold;'>{flight_label}</span>"
+
             cols = st.columns([5, 1])
-            cols[0].markdown(f"**{flight_label}**")
+            cols[0].markdown(styled_label, unsafe_allow_html=True)
 
             if cols[1].button("Observe", key=f"observe_{i}"):
                 current_obs = row["Observers"].split(", ") if row["Observers"] else []
@@ -85,11 +92,11 @@ if st.session_state.signup_active and st.session_state.name:
                     st.info("You already signed up for this flight.")
 
     st.markdown("###")
-    if st.button("✅ Done Signing Up"):
+    if st.button("Done Signing Up"):
         st.session_state.signup_active = False
         st.rerun()
 
-# Show updated table
+# Display updated table
 st.markdown("---")
 st.subheader("Today's Flights")
 st.dataframe(df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP", "Observers"]])
