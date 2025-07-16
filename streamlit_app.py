@@ -28,7 +28,6 @@ df = pd.DataFrame(data)
 name = st.text_input("Enter your name:")
 signup_clicked = st.button("Sign up")
 
-# Sign-up and selection UI
 if signup_clicked and name:
     st.success(f"Hi {name}, please select the flights you'd like to observe!")
 
@@ -43,8 +42,8 @@ if signup_clicked and name:
                 if name not in current_obs:
                     current_obs.append(name)
                     df.at[i, "Observers"] = ", ".join(current_obs)
-                    # Update Google Sheet
-                    sheet.update_cell(i + 2, df.columns.get_loc("Observers") + 1, df.at[i, "Observers"])
+                    updated_row = df.iloc[i].tolist()
+                    sheet.update(f"A{i+2}:Z{i+2}", [updated_row])  # update full row
                     st.success(f"{name}, you've signed up for this flight!")
                 else:
                     st.info("You already signed up for this flight.")
