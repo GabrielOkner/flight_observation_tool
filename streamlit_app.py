@@ -194,7 +194,7 @@ elif st.session_state.mode == "tracker":
         st.markdown("### Flights Observed by Continent")
         df_continent = df_summary.groupby("Continent")["Signups"].sum().sort_values(ascending=False)
 
-        st.markdown("### Total Progress by Continent (Goal: 10 per Continent)")
+        st.markdown("### Total Progress by Continent")
         cols = st.columns(min(5, len(df_continent)))  # Spread nicely, up to 5 per row
 
         for i, (continent, count) in enumerate(df_continent.items()):
