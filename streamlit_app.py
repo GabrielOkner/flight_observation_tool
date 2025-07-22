@@ -42,7 +42,7 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Monday 7/21"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+        selected_day = "Tuesday 7/22"  # REMEMBER TO CHANGE (Figure out how to make automatic)
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -75,7 +75,7 @@ if st.session_state.mode == "signup":
             with st.container():
                 current_obs = row["Observers"].split(", ") if row["Observers"] else []
                 category = row.get("Fleet Type Grouped", "").strip().capitalize()
-                flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']} | {category}"
+                flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']} | {category} | {row['Has Equipment']}"
                 has_observers = bool(row["Observers"])
 
                 styled_label = (
@@ -195,7 +195,7 @@ elif st.session_state.mode == "tracker":
         df_continent = df_summary.groupby("Continent")["Signups"].sum().sort_values(ascending=False)
 
         st.markdown("### Total Progress by Continent")
-        cols = st.columns(min(5, len(df_continent)))  # Spread nicely, up to 5 per row
+        cols = st.columns(min(5, len(df_continent))) 
 
         for i, (continent, count) in enumerate(df_continent.items()):
             col = cols[i % len(cols)]  # Cycle through columns
@@ -229,6 +229,6 @@ if st.session_state.mode == "today":
     filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
 
     if not filtered_df.empty:
-        st.dataframe(filtered_df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP", "Observers"]])
+        st.dataframe(filtered_df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP","Has Equipment", "Observers"]])
     else:
         st.info("No upcoming flights found.")
