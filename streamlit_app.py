@@ -229,6 +229,6 @@ if st.session_state.mode == "today":
     filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
 
     if not filtered_df.empty:
-        st.dataframe(filtered_df[["DEP GATE", "FLIGHT OUT", "ARR", "SCHED DEP", "Est. Boarding Start", "Est. Boarding End", "Has Equipment", "Observers"]])
+        st.dataframe(filtered_df[["DEP GATE", "Flight Num", "ARR", "SCHED DEP", "Est. Boarding Start", "Observers"]])
     else:
         st.info("No upcoming flights found.")
