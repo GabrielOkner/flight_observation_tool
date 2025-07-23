@@ -42,7 +42,7 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Tuesday 7/22"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+        selected_day = "Wednesday 7/23"  # REMEMBER TO CHANGE (Figure out how to make automatic)
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -144,7 +144,7 @@ if st.session_state.mode == "signup":
 
 elif st.session_state.mode == "tracker":
     st.subheader("Observer Sign-Up Tracker")
-    GOAL_PER_CATEGORY = 10  # Total goal per category (across all days)
+    GOAL_PER_CATEGORY = 10
 
     summary_data = []
 
