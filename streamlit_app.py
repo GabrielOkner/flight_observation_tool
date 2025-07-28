@@ -6,7 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 
 st.set_page_config(page_title="Flight Observer", layout="centered")
-st.title("IAD Flight Observation")
+st.title("SFO Flight Observation")
 
 # Authorize Google Sheets
 scope = [
@@ -42,7 +42,7 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Thursday 7/24"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+        selected_day = "Monday 7/28"  # REMEMBER TO CHANGE (Figure out how to make automatic)
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -224,7 +224,7 @@ if st.session_state.mode == "today":
     if "Parsed Time" not in df.columns:
         df["Parsed Time"] = df["SCHED DEP"].apply(parse_time)
 
-    iad_time = pytz.timezone("America/New_York")
+    iad_time = pytz.timezone("America/Los_Angeles")
     now_ct = datetime.now(iad_time).replace(second=0, microsecond=0).time()
     filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
 
