@@ -6,7 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 
 st.set_page_config(page_title="Flight Observer", layout="centered")
-st.title("SFO Flight Observation")
+st.title("IAH Flight Observation")
 
 # Authorize Google Sheets
 scope = [
@@ -42,7 +42,7 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Wednesday 7/30"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+        selected_day = "Monday 8/4"  # REMEMBER TO CHANGE (Figure out how to make automatic)
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -75,7 +75,7 @@ if st.session_state.mode == "signup":
             with st.container():
                 current_obs = row["Observers"].split(", ") if row["Observers"] else []
                 category = row.get("Fleet Type Grouped", "").strip().capitalize()
-                flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']} | {category} | {row['Has Equipment']}"
+                flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {row['SCHED DEP']} → {row['ARR']} | {category} | Passengers: {row['PAX TOTAL']} | {row['Has Equipment']}"
                 has_observers = bool(row["Observers"])
 
                 styled_label = (
