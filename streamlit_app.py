@@ -224,7 +224,7 @@ if st.session_state.mode == "today":
     if "Parsed Time" not in df.columns:
         df["Parsed Time"] = df["SCHED DEP"].apply(parse_time)
 
-    iad_time = pytz.timezone("America/Los_Angeles")
+    iad_time = pytz.timezone("America/Denver")
     now_ct = datetime.now(iad_time).replace(second=0, microsecond=0).time()
     filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
 
