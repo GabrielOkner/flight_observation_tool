@@ -42,7 +42,11 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Tuesday 8/5"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+    # Automatically determine today's sheet name for IAH (Central Time)
+    central_tz = pytz.timezone("America/Chicago")
+    today = datetime.now(central_tz)
+    # Format: "Tuesday 8/5". Use '%-m' and '%-d' for non-padded day/month.
+    selected_day = today.strftime("%A %-m/%-d")
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -208,8 +212,6 @@ elif st.session_state.mode == "tracker":
 
 
 
-
-
 # Only show upcoming flights in "today" mode
 if st.session_state.mode == "today":
     st.markdown("---")
@@ -224,11 +226,30 @@ if st.session_state.mode == "today":
     if "Parsed Time" not in df.columns:
         df["Parsed Time"] = df["SCHED DEP"].apply(parse_time)
 
-    iad_time = pytz.timezone("America/Denver")
-    now_ct = datetime.now(iad_time).replace(second=0, microsecond=0).time()
+    # Use the correct timezone for IAH (Central Time)
+    central_tz = pytz.timezone("America/Chicago")
+    now_ct = datetime.now(central_tz).replace(second=0, microsecond=0).time()
     filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
 
     if not filtered_df.empty:
-        st.dataframe(filtered_df[["DEP GATE", "Flight Num", "ARR", "SCHED DEP", "Est. Boarding Start", "Observers"]], hide_index = True)
+        # Define the columns to display and their new names
+        cols_to_display = {
+            "DEP GATE": "Gate",
+            "Flight Num": "Flight Num",
+            "ARR": "Dest",
+            "SCHED DEP": "Dep",
+            "Est. Boarding Start": "Board Start",
+            "Est. Boarding End": "Board End",
+            "PAX TOTAL": "Pax",
+            "Observers": "Observers"
+        }
+        
+        # Create a new dataframe with only the columns we want
+        display_df = filtered_df[list(cols_to_display.keys())]
+        
+        # Rename the columns for display
+        display_df = display_df.rename(columns=cols_to_display)
+        
+        st.dataframe(display_df, hide_index=True, use_container_width=True)
     else:
         st.info("No upcoming flights found.")
