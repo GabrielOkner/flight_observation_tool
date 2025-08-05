@@ -121,18 +121,20 @@ try:
             upcoming_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
 
             if not upcoming_df.empty:
+                # Define the columns to display and their new names
                 cols_to_display = {
                     "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
                     "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End",
                     "PAX TOTAL": "Pax", "Important flight?": "Important", "Observers": "Observers"
                 }
-                display_df = upcoming_df.copy()
-                # Format time columns for display
-                display_df['Board Start'] = display_df['Est. Boarding Start'].dt.strftime('%-I:%M %p')
-                display_df['Board End'] = display_df['Est. Boarding End'].dt.strftime('%-I:%M %p')
+                # Select and rename the columns for the final display
+                final_display_df = upcoming_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
 
-                # Select and rename columns for the final display
-                final_display_df = display_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
+                # Format the time columns to show only the time (e.g., 4:26 PM)
+                # We do this *after* renaming to ensure we're modifying the final output
+                final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+
                 st.dataframe(final_display_df, hide_index=True, use_container_width=True)
             else:
                 st.info("No more upcoming flights for today.")
@@ -188,14 +190,19 @@ try:
                 if not st.session_state.suggested_schedule.empty:
                     st.markdown("---")
                     st.success("Here is your suggested schedule:")
-                    display_df = st.session_state.suggested_schedule.copy()
+                    
+                    # Define columns to display and their new names
                     display_cols = {
                         "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
                         "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End"
                     }
-                    display_df['Board Start'] = display_df['Est. Boarding Start'].dt.strftime('%-I:%M %p')
-                    display_df['Board End'] = display_df['Est. Boarding End'].dt.strftime('%-I:%M %p')
-                    final_display_df = display_df[list(display_cols.keys())].rename(columns=display_cols)
+                    # Select and rename columns from the suggested schedule
+                    final_display_df = st.session_state.suggested_schedule[list(display_cols.keys())].rename(columns=display_cols)
+
+                    # Format the time columns for display
+                    final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                    final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+
                     st.dataframe(final_display_df, hide_index=True, use_container_width=True)
 
                     if st.button("Confirm & Sign Up For This Schedule", use_container_width=True):
