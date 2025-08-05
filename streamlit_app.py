@@ -52,6 +52,11 @@ def get_sheet_data(_gc, sheet_name):
         
         df = pd.DataFrame(data)
 
+        # --- FIX: Strip whitespace from all column names ---
+        df.columns = df.columns.str.strip()
+        st.info(f"DataFrame Columns (after stripping whitespace): {df.columns.tolist()}") # Debugging line
+        # --- End FIX ---
+
         # --- Data Cleaning and Type Conversion ---
         def parse_and_localize_time(time_str):
             """Safely parse time strings and combine with today's date, making it timezone-aware."""
