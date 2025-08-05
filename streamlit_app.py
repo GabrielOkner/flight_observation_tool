@@ -3,14 +3,14 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, time, timedelta
-import pytz # Corrected: changed pytup to pytz
+import pytz
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Flight Observer", layout="wide")
 st.title("IAH Flight Observation Tool")
 
 # --- Constants and Timezone ---
-CENTRAL_TZ = pytz.timezone("America/Chicago") # Corrected: changed pytup.timezone to pytz.timezone
+CENTRAL_TZ = pytz.timezone("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
 # --- Authorization & Data Loading (Cached) ---
@@ -37,11 +37,6 @@ def get_sheet_data(_gc, sheet_name):
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
         
-        # Removed: DEBUGGING STEP: List all available sheet names
-        # all_worksheets = master_sheet.worksheets()
-        # available_sheet_titles = [ws.title for ws in all_worksheets]
-        # st.info(f"Available Sheets in Spreadsheet: {available_sheet_titles}")
-        
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records() # This will reassign data if successful
         
@@ -53,8 +48,6 @@ def get_sheet_data(_gc, sheet_name):
 
         # --- FIX: Strip whitespace from all column names ---
         df.columns = df.columns.str.strip()
-        # Removed: Debugging line for DataFrame Columns
-        # st.info(f"DataFrame Columns (after stripping whitespace): {df.columns.tolist()}") 
 
         # --- Data Cleaning and Type Conversion ---
         def parse_and_localize_time(time_str):
@@ -79,7 +72,6 @@ def get_sheet_data(_gc, sheet_name):
                 df[col] = df[col].apply(parse_and_localize_time)
 
         # Ensure other columns have the correct type
-        # Updated 'Flight Num' to 'FLIGHT OUT'
         for col in ['FLIGHT OUT', 'Observers', 'Fleet Type Grouped']:
              if col in df.columns:
                  df[col] = df[col].astype(str)
@@ -100,7 +92,7 @@ try:
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
     
     # Define the days of the week for the tabs (only Monday, Tuesday, Wednesday)
-    # This is the full list of available tabs.
+    # This is the full list of available tabs in chronological order.
     available_tabs = ["Monday", "Tuesday", "Wednesday"]
     
     # --- Session State Initialization ---
@@ -131,21 +123,19 @@ try:
     if st.session_state.mode == "today":
         st.subheader(f"Upcoming Flights for {display_date}")
         
-        # Dynamically reorder tabs so the current day is first, if it's one of the available tabs
-        if current_day_sheet_name in available_tabs:
-            # Remove current day from its position and insert at the beginning
-            reordered_day_names = [current_day_sheet_name] + [
-                day for day in available_tabs if day != current_day_sheet_name
-            ]
-        else:
-            # If current day is not in available_tabs (e.g., Thursday), use the default order
-            reordered_day_names = available_tabs
+        # Determine the index of the current day in the available_tabs list
+        try:
+            default_tab_index = available_tabs.index(current_day_sheet_name)
+        except ValueError:
+            # If the current day is not in the limited list (e.g., Thursday), default to the first tab
+            default_tab_index = 0
 
-        # Create tabs for the specified days of the week
-        tabs = st.tabs(reordered_day_names)
+        # Create tabs for the specified days of the week, with the current day as default
+        # The tabs are displayed in the order defined by 'available_tabs'
+        tabs = st.tabs(available_tabs, default_tab_index) # Use default_tab_index to set the active tab
 
         # Loop through tabs and display data for the corresponding day
-        for i, day in enumerate(reordered_day_names): # Use reordered_day_names here
+        for i, day in enumerate(available_tabs): # Iterate through available_tabs for chronological order
             with tabs[i]:
                 df = get_sheet_data(gc, day)
                 if df is not None and not df.empty:
@@ -157,17 +147,16 @@ try:
                         now_datetime = datetime.now(CENTRAL_TZ)
                         # For today's tab, show only upcoming flights
                         display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
-                        # Removed: st.info(f"Displaying **upcoming flights** for {day}.")
                     else:
                         # For other days (Monday, Wednesday), show all flights with valid times
                         display_df = valid_times_df.copy()
-                        # Removed: st.info(f"Displaying **all flights** with valid boarding times for {day}.")
                          
                     if not display_df.empty:
                         cols_to_display = {
                             "DEP GATE": "Gate", 
                             "FLIGHT OUT": "Flight", 
                             "ARR": "Dest",
+                            "SCHED DEP": "ETD (Sched Dep)", # Added ETD (Sched Dep)
                             "Est. Boarding Start": "Board Start", 
                             "Est. Boarding End": "Board End",
                             "PAX TOTAL": "Pax", 
@@ -185,6 +174,8 @@ try:
                             final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                         if 'Board End' in final_display_df.columns:
                             final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                        if 'ETD (Sched Dep)' in final_display_df.columns: # Format ETD (Sched Dep)
+                            final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
 
                         st.dataframe(final_display_df, hide_index=True, use_container_width=True)
                     else:
@@ -250,6 +241,7 @@ try:
                         "DEP GATE": "Gate", 
                         "FLIGHT OUT": "Flight", 
                         "ARR": "Dest",
+                        "SCHED DEP": "ETD (Sched Dep)", # Added ETD (Sched Dep)
                         "Est. Boarding Start": "Board Start", 
                         "Est. Boarding End": "Board End"
                     }
@@ -262,6 +254,8 @@ try:
                         final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                     if 'Board End' in final_display_df.columns:
                         final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                    if 'ETD (Sched Dep)' in final_display_df.columns: # Format ETD (Sched Dep)
+                        final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
 
                     st.dataframe(final_display_df, hide_index=True, use_container_width=True)
 
