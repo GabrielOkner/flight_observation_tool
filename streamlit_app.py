@@ -36,6 +36,13 @@ def get_sheet_data(_gc, sheet_name):
     data = [] 
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
+        
+        # --- DEBUGGING STEP: List all available sheet names ---
+        all_worksheets = master_sheet.worksheets()
+        available_sheet_titles = [ws.title for ws in all_worksheets]
+        st.info(f"Available Sheets in Spreadsheet: {available_sheet_titles}")
+        # --- END DEBUGGING STEP ---
+
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records() # This will reassign data if successful
         
@@ -130,7 +137,6 @@ try:
             reordered_day_names = available_tabs
 
         # Create tabs for the specified days of the week
-        # Removed 'selected_tab' as it's not supported in older Streamlit versions
         tabs = st.tabs(reordered_day_names)
 
         # Loop through tabs and display data for the corresponding day
