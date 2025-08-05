@@ -92,11 +92,12 @@ if st.session_state.mode == "today":
                 "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End",
                 "PAX TOTAL": "Pax", "Important flight?": "Important", "Observers": "Observers"
             }
+            display_df = upcoming_df.copy()
             # Format time columns for display
-            for col in ["Board Start", "Board End"]:
-                upcoming_df[col] = upcoming_df[cols_to_display.inverse[col]].dt.strftime('%I:%M %p')
+            display_df['Board Start'] = display_df['Est. Boarding Start'].dt.strftime('%I:%M %p')
+            display_df['Board End'] = display_df['Est. Boarding End'].dt.strftime('%I:%M %p')
 
-            display_df = upcoming_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
+            display_df = display_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
             st.dataframe(display_df, hide_index=True, use_container_width=True)
         else:
             st.info("No more upcoming flights for today.")
@@ -164,7 +165,8 @@ elif st.session_state.mode == "suggest":
             display_df['Board Start'] = display_df['Est. Boarding Start'].dt.strftime('%I:%M %p')
             display_df['Board End'] = display_df['Est. Boarding End'].dt.strftime('%I:%M %p')
 
-            st.dataframe(display_df[list(display_cols.values())], hide_index=True)
+            st.dataframe(display_df[list(display_cols.keys())].rename(columns=display_cols), hide_index=True)
+
 
             if st.button("Confirm & Sign Up For This Schedule"):
                 sheet_to_update = sheet_map[current_sheet_name]
@@ -215,9 +217,4 @@ elif st.session_state.mode == "signup":
 # --- MODE 4: TRACKER (Your existing logic) ---
 # ==============================================================================
 elif st.session_state.mode == "tracker":
-    st.subheader("Observer Sign-Up Tracker")
-    GOAL_PER_CATEGORY = 10
-    summary_data = []
-    for sheet_name in sheet_map.keys():
-        df_sheet = get_sheet_data(sheet_name)
-        if df_sheet is not None and "Observers" in df_sheet.colu
+    st.subhea
