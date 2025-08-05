@@ -12,7 +12,6 @@ st.title("IAH Flight Observation Tool")
 # --- Constants and Timezone ---
 CENTRAL_TZ = pytz.timezone("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
-DAILY_SHEET_NAME = "Today's Flights" # Use a fixed name for the daily sheet
 
 # --- Authorization & Data Loading (Cached) ---
 @st.cache_resource(ttl=600)
@@ -67,11 +66,11 @@ def get_sheet_data(_gc, sheet_name):
         # Ensure other columns have the correct type
         for col in ['Flight Num', 'Observers', 'Fleet Type Grouped']:
              if col in df.columns:
-                df[col] = df[col].astype(str)
+                 df[col] = df[col].astype(str)
 
         return df
     except gspread.exceptions.WorksheetNotFound:
-        st.error(f"Sheet named '{sheet_name}' not found. Please ensure today's flight data exists.")
+        st.error(f"Sheet named '{sheet_name}' not found. Please ensure a sheet for today's day of the week exists (e.g., 'Tuesday').")
         return None
     except Exception as e:
         st.error(f"An error occurred while processing sheet '{sheet_name}': {e}")
@@ -83,7 +82,10 @@ try:
     master_sheet = gc.open_by_url(SHEET_URL)
     all_sheets = master_sheet.worksheets()
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
-
+    
+    # Define the days of the week for the tabs
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
     # --- Session State Initialization ---
     if "mode" not in st.session_state:
         st.session_state.mode = "today"
@@ -101,51 +103,58 @@ try:
     if col4.button("View Tracker", use_container_width=True):
         st.session_state.mode = "tracker"
 
-    # --- Date for Display ---
+    # --- Dynamic Sheet Name Logic ---
     today_date = datetime.now(CENTRAL_TZ)
+    current_day_sheet_name = today_date.strftime("%A")
     display_date = today_date.strftime("%A, %B %d")
-
 
     # ==============================================================================
     # --- MODE 1: TODAY'S FLIGHTS (Read-Only View) ---
     # ==============================================================================
     if st.session_state.mode == "today":
         st.subheader(f"Upcoming Flights for {display_date}")
-        df = get_sheet_data(gc, DAILY_SHEET_NAME)
+        
+        # Create tabs for each day of the week
+        tabs = st.tabs(day_names)
 
-        if df is not None and not df.empty:
-            now_datetime = datetime.now(CENTRAL_TZ)
+        # Loop through tabs and display data for the corresponding day
+        for i, day in enumerate(day_names):
+            with tabs[i]:
+                df = get_sheet_data(gc, day)
+                if df is not None and not df.empty:
+                    now_datetime = datetime.now(CENTRAL_TZ)
+                    valid_times_df = df.dropna(subset=['Est. Boarding Start'])
+                    
+                    # Filter for upcoming flights only on the current day's tab
+                    if day == current_day_sheet_name:
+                         upcoming_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
+                    else:
+                         upcoming_df = valid_times_df.copy()
+                         
+                    if not upcoming_df.empty:
+                        cols_to_display = {
+                            "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
+                            "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End",
+                            "PAX TOTAL": "Pax", "Important flight?": "Important", "Observers": "Observers"
+                        }
+                        final_display_df = upcoming_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
+                        
+                        final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                        final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
 
-            # Filter out rows with invalid boarding start times before comparison
-            valid_times_df = df.dropna(subset=['Est. Boarding Start'])
-            upcoming_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
-
-            if not upcoming_df.empty:
-                # Define the columns to display and their new names
-                cols_to_display = {
-                    "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
-                    "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End",
-                    "PAX TOTAL": "Pax", "Important flight?": "Important", "Observers": "Observers"
-                }
-                # Select and rename the columns for the final display
-                final_display_df = upcoming_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
-
-                # Format the time columns to show only the time (e.g., 4:26 PM)
-                # We do this *after* renaming to ensure we're modifying the final output
-                final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
-                final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-
-                st.dataframe(final_display_df, hide_index=True, use_container_width=True)
-            else:
-                st.info("No more upcoming flights for today.")
+                        st.dataframe(final_display_df, hide_index=True, use_container_width=True)
+                    else:
+                        st.info("No more upcoming flights for this day.")
+                else:
+                    st.info(f"No flight data available for {day}.")
 
     # ==============================================================================
     # --- MODE 2: SUGGEST MY SCHEDULE ---
     # ==============================================================================
     elif st.session_state.mode == "suggest":
         st.subheader("Get an Optimized Schedule Suggestion")
-        df = get_sheet_data(gc, DAILY_SHEET_NAME)
-
+        df = get_sheet_data(gc, current_day_sheet_name)
+        
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="suggest_name")
             c1, c2 = st.columns(2)
@@ -157,9 +166,8 @@ try:
                     st.warning("Please enter your name.")
                 else:
                     flights_df = df.copy()
-                    # Filter for flights that have equipment and are unassigned
                     flights_df = flights_df[(flights_df['Has Equipment'] == 'Yes') & (flights_df['Observers'] == '')]
-
+                    
                     start_datetime = CENTRAL_TZ.localize(datetime.combine(today_date.date(), start_time_input))
                     end_datetime = CENTRAL_TZ.localize(datetime.combine(today_date.date(), end_time_input))
 
@@ -170,18 +178,15 @@ try:
                         (flights_df['Est. Boarding End'] <= end_datetime)
                     ].copy()
 
-                    # Prioritize important flights
                     available_flights['importance_score'] = available_flights['Important flight?'].apply(lambda x: 0 if x == 'Yes' else 1)
                     available_flights = available_flights.sort_values(by=['importance_score', 'Est. Boarding Start'])
 
                     schedule = []
                     last_flight_end = datetime.min.replace(tzinfo=CENTRAL_TZ)
                     for _, flight in available_flights.iterrows():
-                        # Greedy algorithm: pick the next available non-conflicting flight
                         flight_start = flight['Est. Boarding Start']
                         if flight_start >= last_flight_end:
                             schedule.append(flight)
-                            # Set buffer for next flight
                             last_flight_end = flight['Est. Boarding End'] + timedelta(minutes=10)
 
                     st.session_state.suggested_schedule = pd.DataFrame(schedule) if schedule else pd.DataFrame()
@@ -191,15 +196,12 @@ try:
                     st.markdown("---")
                     st.success("Here is your suggested schedule:")
                     
-                    # Define columns to display and their new names
                     display_cols = {
                         "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
                         "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End"
                     }
-                    # Select and rename columns from the suggested schedule
                     final_display_df = st.session_state.suggested_schedule[list(display_cols.keys())].rename(columns=display_cols)
 
-                    # Format the time columns for display
                     final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                     final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
 
@@ -207,7 +209,7 @@ try:
 
                     if st.button("Confirm & Sign Up For This Schedule", use_container_width=True):
                         with st.spinner("Updating Google Sheet..."):
-                            sheet_to_update = sheet_map[DAILY_SHEET_NAME]
+                            sheet_to_update = sheet_map[current_day_sheet_name]
                             flights_to_update = st.session_state.suggested_schedule['Flight Num'].tolist()
                             all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("Flight Num") + 1)
                             observer_col_index = df.columns.get_loc("Observers") + 1
@@ -215,7 +217,6 @@ try:
                             cells_to_update = []
                             for flight_num in flights_to_update:
                                 try:
-                                    # Find the row index in the live sheet
                                     row_index = all_flight_nums.index(str(flight_num)) + 1
                                     cells_to_update.append(gspread.Cell(row_index, observer_col_index, name.strip()))
                                 except ValueError:
@@ -236,44 +237,49 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "signup":
         st.subheader("Manual Flight Sign-up")
-        df = get_sheet_data(gc, DAILY_SHEET_NAME)
-        if df is not None and not df.empty:
-            name = st.text_input("Enter your name:", key="manual_name")
-            if name.strip():
-                # Get the latest full column of flight numbers and observers for matching
-                sheet_to_update = sheet_map[DAILY_SHEET_NAME]
-                flight_num_col_idx = df.columns.get_loc("Flight Num") + 1
-                observer_col_idx = df.columns.get_loc("Observers") + 1
-                live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
+        # Create tabs for each day of the week
+        tabs = st.tabs(day_names)
+        
+        name = st.text_input("Enter your name:", key="manual_name")
 
-                for i, row in df.iterrows():
-                    sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
-                    flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']}"
-                    flight_num_to_update = str(row['Flight Num'])
+        for i, day in enumerate(day_names):
+            with tabs[i]:
+                if name.strip():
+                    df = get_sheet_data(gc, day)
+                    if df is not None and not df.empty:
+                        sheet_to_update = sheet_map[day]
+                        flight_num_col_idx = df.columns.get_loc("Flight Num") + 1
+                        observer_col_idx = df.columns.get_loc("Observers") + 1
+                        live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
 
-                    if st.button(flight_label, key=f"manual_{flight_num_to_update}_{i}"):
-                        try:
-                            # Find the row index from the live data, not the cached dataframe
-                            # Add 1 because list is 0-indexed and sheet is 1-indexed
-                            sheet_row = live_flight_nums.index(flight_num_to_update) + 1
+                        for j, row in df.iterrows():
+                            sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
+                            flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
+                            flight_num_to_update = str(row['Flight Num'])
 
-                            # Get the current list of observers directly from the sheet
-                            current_observers_str = sheet_to_update.cell(sheet_row, observer_col_idx).value or ""
-                            observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip()]
+                            if st.button(flight_label, key=f"manual_{day}_{flight_num_to_update}_{j}"):
+                                try:
+                                    sheet_row = live_flight_nums.index(flight_num_to_update) + 1
+                                    current_observers_str = sheet_to_update.cell(sheet_row, observer_col_idx).value or ""
+                                    observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip()]
 
-                            if name.strip() not in observers_list:
-                                observers_list.append(name.strip())
-                                new_observers = ", ".join(observers_list)
-                                sheet_to_update.update_cell(sheet_row, observer_col_idx, new_observers)
-                                st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']}!")
-                                st.cache_data.clear()
-                                st.rerun()
-                            else:
-                                st.warning(f"You are already signed up for this flight.")
-                        except ValueError:
-                            st.error(f"Could not find flight {flight_num_to_update} in the sheet. It may have been changed. Please refresh.")
-                        except Exception as e:
-                            st.error(f"An error occurred: {e}")
+                                    if name.strip() not in observers_list:
+                                        observers_list.append(name.strip())
+                                        new_observers = ", ".join(observers_list)
+                                        sheet_to_update.update_cell(sheet_row, observer_col_idx, new_observers)
+                                        st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']} on {day}!")
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                    else:
+                                        st.warning(f"You are already signed up for this flight on {day}.")
+                                except ValueError:
+                                    st.error(f"Could not find flight {flight_num_to_update} in the sheet for {day}. It may have been changed. Please refresh.")
+                                except Exception as e:
+                                    st.error(f"An error occurred: {e}")
+                    else:
+                        st.info(f"No flight data available for {day}.")
+                else:
+                    st.warning("Please enter your name to sign up for flights.")
 
     # ==============================================================================
     # --- MODE 4: TRACKER ---
@@ -283,8 +289,6 @@ try:
         GOAL_PER_CATEGORY = 10
         summary_data = []
         
-        # This will now check all sheets, but will primarily be useful if you keep old sheets with date names.
-        # If you only use "Today's Flights", the tracker will only show today's data.
         relevant_sheet_names = [s.title for s in all_sheets] 
         
         for sheet_name in relevant_sheet_names:
@@ -293,7 +297,6 @@ try:
                 df_sheet.dropna(subset=["Observers", "Fleet Type Grouped"], inplace=True)
                 for _, row in df_sheet.iterrows():
                     observers_str = str(row["Observers"])
-                    # Robustly count observers by splitting by comma and filtering out empty strings
                     num_signups = len([obs for obs in observers_str.split(",") if obs.strip()])
                     category = str(row["Fleet Type Grouped"]).strip().lower()
                     if category in {"widebody", "narrowbody", "express"}:
@@ -301,7 +304,6 @@ try:
         
         if summary_data:
             df_summary = pd.DataFrame(summary_data)
-            # Use pivot_table to aggregate signups per day and category
             chart_data = df_summary.pivot_table(index="Day", columns="Category", values="Signups", aggfunc="sum", fill_value=0)
             
             st.markdown("### Signups by Day and Category")
