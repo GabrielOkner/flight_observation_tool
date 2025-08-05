@@ -123,19 +123,22 @@ try:
     if st.session_state.mode == "today":
         st.subheader(f"Upcoming Flights for {display_date}")
         
-        # Determine the index of the current day in the available_tabs list
-        try:
-            default_tab_index = available_tabs.index(current_day_sheet_name)
-        except ValueError:
-            # If the current day is not in the limited list (e.g., Thursday), default to the first tab
-            default_tab_index = 0
+        # Dynamically reorder tabs so the current day is first, if it's one of the available tabs
+        if current_day_sheet_name in available_tabs:
+            # Remove current day from its position and insert at the beginning
+            reordered_day_names = [current_day_sheet_name] + [
+                day for day in available_tabs if day != current_day_sheet_name
+            ]
+        else:
+            # If current day is not in the limited list (e.g., Thursday), use the default order
+            reordered_day_names = available_tabs
 
-        # Create tabs for the specified days of the week, with the current day as default
-        # The tabs are displayed in the order defined by 'available_tabs'
-        tabs = st.tabs(available_tabs, default_tab_index) # Use default_tab_index to set the active tab
+        # Create tabs for the specified days of the week. The order of 'reordered_day_names'
+        # will determine the default active tab.
+        tabs = st.tabs(reordered_day_names)
 
         # Loop through tabs and display data for the corresponding day
-        for i, day in enumerate(available_tabs): # Iterate through available_tabs for chronological order
+        for i, day in enumerate(reordered_day_names): # Iterate through reordered_day_names
             with tabs[i]:
                 df = get_sheet_data(gc, day)
                 if df is not None and not df.empty:
@@ -156,7 +159,7 @@ try:
                             "DEP GATE": "Gate", 
                             "FLIGHT OUT": "Flight", 
                             "ARR": "Dest",
-                            "SCHED DEP": "ETD (Sched Dep)", # Added ETD (Sched Dep)
+                            "SCHED DEP": "ETD (Sched Dep)", 
                             "Est. Boarding Start": "Board Start", 
                             "Est. Boarding End": "Board End",
                             "PAX TOTAL": "Pax", 
@@ -174,7 +177,7 @@ try:
                             final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                         if 'Board End' in final_display_df.columns:
                             final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-                        if 'ETD (Sched Dep)' in final_display_df.columns: # Format ETD (Sched Dep)
+                        if 'ETD (Sched Dep)' in final_display_df.columns: 
                             final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
 
                         st.dataframe(final_display_df, hide_index=True, use_container_width=True)
@@ -241,7 +244,7 @@ try:
                         "DEP GATE": "Gate", 
                         "FLIGHT OUT": "Flight", 
                         "ARR": "Dest",
-                        "SCHED DEP": "ETD (Sched Dep)", # Added ETD (Sched Dep)
+                        "SCHED DEP": "ETD (Sched Dep)", 
                         "Est. Boarding Start": "Board Start", 
                         "Est. Boarding End": "Board End"
                     }
@@ -254,7 +257,7 @@ try:
                         final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                     if 'Board End' in final_display_df.columns:
                         final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-                    if 'ETD (Sched Dep)' in final_display_df.columns: # Format ETD (Sched Dep)
+                    if 'ETD (Sched Dep)' in final_display_df.columns: 
                         final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
 
                     st.dataframe(final_display_df, hide_index=True, use_container_width=True)
