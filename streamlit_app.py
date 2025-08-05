@@ -3,14 +3,14 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, time, timedelta
-import pytz
+import pytz # Corrected: changed pytup to pytz
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Flight Observer", layout="wide")
 st.title("IAH Flight Observation Tool")
 
 # --- Constants and Timezone ---
-CENTRAL_TZ = pytup.timezone("America/Chicago")
+CENTRAL_TZ = pytz.timezone("America/Chicago") # Corrected: changed pytup.timezone to pytz.timezone
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
 # --- Authorization & Data Loading (Cached) ---
