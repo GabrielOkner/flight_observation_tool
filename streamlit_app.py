@@ -40,7 +40,7 @@ def get_sheet_data(sheet_name):
                 # Handle both '9:25' and '9:25 AM' formats
                 time_obj = pd.to_datetime(str(time_str), errors='coerce').time()
                 if pd.notna(time_obj):
-                    return datetime.combine(datetime.today(), time_obj)
+                    return datetime.combine(datetime.today().date(), time_obj)
                 return pd.NaT
             except (ValueError, TypeError):
                 return pd.NaT
@@ -95,8 +95,8 @@ if st.session_state.mode == "today":
     df = get_sheet_data(current_sheet_name)
 
     if df is not None:
-        # FIX: Use a full datetime object for comparison
-        now_datetime = datetime.now(central_tz)
+        # FIX: Use a full timezone-aware datetime object for comparison
+        now_datetime = datetime.now(central_tz).replace(tzinfo=None) # Make naive to compare with df
         
         # Filter out rows with invalid boarding start times before comparison
         valid_times_df = df.dropna(subset=['Est. Boarding Start'])
@@ -129,6 +129,7 @@ elif st.session_state.mode == "suggest":
     if df is not None:
         name = st.text_input("Enter your name:", key="suggest_name")
         c1, c2 = st.columns(2)
+        # FIX: Use datetime.time objects for time_input values
         start_time_input = c1.time_input("Enter your start time:", value=time(9, 0))
         end_time_input = c2.time_input("Enter your end time:", value=time(17, 0))
 
@@ -181,7 +182,7 @@ elif st.session_state.mode == "suggest":
                 display_df['Board Start'] = display_df['Est. Boarding Start'].dt.strftime('%-I:%M %p')
                 display_df['Board End'] = display_df['Est. Boarding End'].dt.strftime('%-I:%M %p')
 
-                final_display_df = display_df[list(display_cols.keys())].rename(columns=cols_to_display)
+                final_display_df = display_df[list(display_cols.keys())].rename(columns=display_cols)
                 st.dataframe(final_display_df, hide_index=True)
 
                 if st.button("Confirm & Sign Up For This Schedule"):
@@ -193,6 +194,7 @@ elif st.session_state.mode == "suggest":
                     with st.spinner("Updating Google Sheet..."):
                         for flight_num in flights_to_update:
                             try:
+                                # Find the correct row index in the live sheet
                                 row_index = all_flight_nums.index(flight_num) + 1
                                 observer_col_index = df.columns.get_loc("Observers") + 1
                                 sheet_to_update.update_cell(row_index, observer_col_index, name)
@@ -221,8 +223,9 @@ elif st.session_state.mode == "signup":
                 
                 if st.button(flight_label, key=f"manual_{i}"):
                     observer_col_index = df.columns.get_loc("Observers") + 1
+                    # FIX: Robustly handle adding names to the observer list
                     current_observers_str = str(row['Observers'])
-                    observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip()]
+                    observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip() and obs.strip().lower() != 'nan']
 
                     if name not in observers_list:
                         observers_list.append(name)
@@ -245,8 +248,9 @@ elif st.session_state.mode == "tracker":
         df_sheet = get_sheet_data(sheet_name)
         if df_sheet is not None and "Observers" in df_sheet.columns and "Fleet Type Grouped" in df_sheet.columns:
             for _, row in df_sheet.iterrows():
+                # FIX: Robustly count observers
                 observers_str = str(row["Observers"])
-                num_signups = len([obs for obs in observers_str.split(",") if obs.strip()]) if observers_str and observers_str != 'nan' else 0
+                num_signups = len([obs for obs in observers_str.split(",") if obs.strip() and obs.strip().lower() != 'nan'])
                 category = str(row["Fleet Type Grouped"]).strip().lower()
                 if category in {"widebody", "narrowbody", "express"}:
                     summary_data.append({"Day": sheet_name, "Category": category, "Signups": num_signups})
@@ -259,7 +263,7 @@ elif st.session_state.mode == "tracker":
 
         total_by_category = chart_data.sum()
         st.markdown("### Total Progress Toward Goals")
-        for category in ["widebody", "narrowbody", "express"]:
+        for category in ["widebody", "narrowbody", "express"}:
             count = total_by_category.get(category, 0)
             progress = min(count / GOAL_PER_CATEGORY, 1.0)
             st.progress(progress, text=f"{category.capitalize()}: {int(count)}/{GOAL_PER_CATEGORY}")
