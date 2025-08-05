@@ -222,15 +222,12 @@ try:
 
         if df is not None and not df.empty:
             # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
+            # Store time objects directly, and let st.slider handle default formatting
             time_options_time_only = []
             for hour in range(7, 24): # 7 AM to 11 PM
                 time_options_time_only.append(time(hour, 0))
                 if hour < 23: # Add 30-minute intervals, but not past 11:00 PM
                     time_options_time_only.append(time(hour, 30))
-
-            # Custom formatter for the slider to display time correctly
-            def format_time_for_slider(time_obj):
-                return time_obj.strftime("%-I:%M %p")
 
             # Find indices for default 9:00 AM and 5:00 PM
             default_start_time = time(9, 0)
@@ -250,7 +247,8 @@ try:
                 min_value=time_options_time_only[0],
                 max_value=time_options_time_only[-1],
                 value=time_options_time_only[start_index],
-                format_func=format_time_for_slider, # Use the custom formatter
+                # Removed format_func as it's not supported in older Streamlit versions
+                # The slider will use the default string representation of datetime.time objects
                 key="suggest_start_time_slider"
             )
             user_end_time = c2.slider(
@@ -258,7 +256,8 @@ try:
                 min_value=time_options_time_only[0],
                 max_value=time_options_time_only[-1],
                 value=time_options_time_only[end_index],
-                format_func=format_time_for_slider, # Use the custom formatter
+                # Removed format_func as it's not supported in older Streamlit versions
+                # The slider will use the default string representation of datetime.time objects
                 key="suggest_end_time_slider"
             )
             
