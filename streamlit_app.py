@@ -34,8 +34,8 @@ def get_sheet_data(_gc, sheet_name):
     """
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
-        sheet = master_sheet.worksheet(sheet_name)
-        data = sheet.get_all_records()
+        all_worksheets = master_sheet.worksheets()
+        sheet = all_worksheets[2] # e.g., 2 if it's the 3rd sheet        data = sheet.get_all_records()
         if not data:
             st.warning(f"Sheet '{sheet_name}' is empty.")
             return pd.DataFrame()
