@@ -42,11 +42,11 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-    # Automatically determine today's sheet name for IAH (Central Time)
-    central_tz = pytz.timezone("America/Chicago")
-    today = datetime.now(central_tz)
-    # Format: "Tuesday 8/5". Use '%-m' and '%-d' for non-padded day/month.
-    selected_day = today.strftime("%A %-m/%-d")
+        # Automatically determine today's sheet name for IAH (Central Time)
+        central_tz = pytz.timezone("America/Chicago")
+        today = datetime.now(central_tz)
+        # Format: "Tuesday 8/5". Use '%-m' and '%-d' for non-padded day/month.
+        selected_day = today.strftime("%A %-m/%-d")
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
