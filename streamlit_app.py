@@ -91,35 +91,19 @@ try:
     all_sheets = master_sheet.worksheets()
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
     
-    # Define the days of the week for the tabs (only Monday, Tuesday, Wednesday)
-    available_tabs = ["Monday", "Tuesday", "Wednesday"]
+    # Define the days of the week for the dropdown (only Monday, Tuesday, Wednesday)
+    available_days_for_selection = ["Monday", "Tuesday", "Wednesday"]
     
     # --- Session State Initialization ---
     if "mode" not in st.session_state:
         st.session_state.mode = "today"
     if "suggested_schedule" not in st.session_state:
         st.session_state.suggested_schedule = None
-    # Initialize active_tab if not set, default to 'Today' or the first available tab
-    if "active_tab" not in st.session_state:
-        today_date = datetime.now(CENTRAL_TZ)
-        current_day_sheet_name = today_date.strftime("%A")
-        if current_day_sheet_name in available_tabs:
-            st.session_state.active_tab = "Today"
-        else:
-            st.session_state.active_tab = available_tabs[0] # Default to Monday if current day is not in the list
-
 
     # --- UI: Mode Selection Buttons ---
     col1, col2, col3, col4 = st.columns(4)
     if col1.button("Today's Flights", use_container_width=True):
         st.session_state.mode = "today"
-        # Reset active_tab to 'Today' when 'Today\'s Flights' button is clicked
-        today_date = datetime.now(CENTRAL_TZ)
-        current_day_sheet_name = today_date.strftime("%A")
-        if current_day_sheet_name in available_tabs:
-            st.session_state.active_tab = "Today"
-        else:
-            st.session_state.active_tab = available_tabs[0] # Default to Monday if current day is not in the list
     if col2.button("Suggest My Schedule", use_container_width=True):
         st.session_state.mode = "suggest"
     if col3.button("Manual Sign-up", use_container_width=True):
@@ -136,69 +120,67 @@ try:
     # --- MODE 1: TODAY'S FLIGHTS (Read-Only View) ---
     # ==============================================================================
     if st.session_state.mode == "today":
-        # Determine the list of tab names, with "Today" replacing the current day
-        tab_display_names = []
-        for day in available_tabs:
+        # Determine the display names for the selectbox, with "Today" for the current day
+        display_options = []
+        default_index = 0 # Default to Monday's index if current day not in available_days_for_selection
+        for i, day in enumerate(available_days_for_selection):
             if day == current_day_sheet_name:
-                tab_display_names.append("Today")
+                display_options.append("Today")
+                default_index = i # Set default index to "Today"
             else:
-                tab_display_names.append(day)
+                display_options.append(day)
 
-        # Create tabs for the specified days of the week.
-        # We need to manually set the selected tab using st.session_state
-        tabs = st.tabs(tab_display_names)
+        # Create the selectbox for day selection
+        selected_display_name = st.selectbox(
+            "Select a Day:",
+            options=display_options,
+            index=default_index, # Set the default selected option
+            key="day_selector_today_mode"
+        )
 
-        # Find the index of the currently active tab
-        try:
-            active_tab_index = tab_display_names.index(st.session_state.active_tab)
-        except ValueError:
-            active_tab_index = 0 # Fallback if active_tab is not found (shouldn't happen with proper init)
-
-        # Display content based on the active tab
-        display_day_name = tab_display_names[active_tab_index]
-        actual_sheet_name = current_day_sheet_name if display_day_name == "Today" else display_day_name
-
-        with tabs[active_tab_index]: # Use the determined active tab for content display
-            st.subheader(f"Flights for {display_day_name}") 
-            df = get_sheet_data(gc, actual_sheet_name)
-            if df is not None and not df.empty:
-                valid_times_df = df.dropna(subset=['Est. Boarding Start'])
+        # Map the selected display name back to the actual sheet name
+        actual_sheet_name = current_day_sheet_name if selected_display_name == "Today" else selected_display_name
+        
+        st.subheader(f"Flights for {selected_display_name}") 
+        df = get_sheet_data(gc, actual_sheet_name)
+        if df is not None and not df.empty:
+            valid_times_df = df.dropna(subset=['Est. Boarding Start'])
+            
+            if actual_sheet_name == current_day_sheet_name:
+                now_datetime = datetime.now(CENTRAL_TZ)
+                display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
+            else:
+                display_df = valid_times_df.copy()
+                 
+            if not display_df.empty:
+                cols_to_display = {
+                    "DEP GATE": "Gate", 
+                    "FLIGHT OUT": "Flight", 
+                    "ARR": "Dest",
+                    "SCHED DEP": "ETD (Sched Dep)", 
+                    "Est. Boarding Start": "Board Start", 
+                    "Est. Boarding End": "Board End",
+                    "PAX TOTAL": "Pax", 
+                    "Important flight?": "Important", 
+                    "Observers": "Observers"
+                }
                 
-                if actual_sheet_name == current_day_sheet_name:
-                    now_datetime = datetime.now(CENTRAL_TZ)
-                    display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
-                else:
-                    display_df = valid_times_df.copy()
-                     
-                if not display_df.empty:
-                    cols_to_display = {
-                        "DEP GATE": "Gate", 
-                        "FLIGHT OUT": "Flight", 
-                        "ARR": "Dest",
-                        "SCHED DEP": "ETD (Sched Dep)", 
-                        "Est. Boarding Start": "Board Start", 
-                        "Est. Boarding End": "Board End",
-                        "PAX TOTAL": "Pax", 
-                        "Important flight?": "Important", 
-                        "Observers": "Observers"
-                    }
-                    
-                    actual_cols_to_display = {k: v for k, v in cols_to_display.items() if k in display_df.columns}
-                    
-                    final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
-                    
-                    if 'Board Start' in final_display_df.columns:
-                        final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
-                    if 'Board End' in final_display_df.columns:
-                        final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-                    if 'ETD (Sched Dep)' in final_display_df.columns: 
-                        final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
+                actual_cols_to_display = {k: v for k, v in cols_to_display.items() if k in display_df.columns}
+                
+                final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
+                
+                if 'Board Start' in final_display_df.columns:
+                    final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                if 'Board End' in final_display_df.columns:
+                    final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                if 'ETD (Sched Dep)' in final_display_df.columns: 
+                    final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
 
-                    st.dataframe(final_display_df, hide_index=True, use_container_width=True)
-                else:
-                    st.info(f"No flights to display for {actual_sheet_name} based on criteria.")
+                st.dataframe(final_display_df, hide_index=True, use_container_width=True)
             else:
-                st.info(f"No flight data available for {actual_sheet_name}.")
+                st.info(f"No flights to display for {actual_sheet_name} based on criteria.")
+        else:
+            st.info(f"No flight data available for {actual_sheet_name}.")
 
     # ==============================================================================
     # --- MODE 2: SUGGEST MY SCHEDULE ---
@@ -308,59 +290,65 @@ try:
         st.subheader("Manual Flight Sign-up")
         
         # Determine the list of tab names, with "Today" replacing the current day
-        tab_display_names = []
-        for day in available_tabs:
+        display_options = []
+        default_index = 0 # Default to Monday's index if current day not in available_days_for_selection
+        for i, day in enumerate(available_days_for_selection):
             if day == current_day_sheet_name:
-                tab_display_names.append("Today")
+                display_options.append("Today")
+                default_index = i # Set default index to "Today"
             else:
-                tab_display_names.append(day)
+                display_options.append(day)
 
-        tabs = st.tabs(tab_display_names)
+        # Create the selectbox for day selection in manual sign-up mode
+        selected_display_name = st.selectbox(
+            "Select a Day:",
+            options=display_options,
+            index=default_index, # Set the default selected option
+            key="day_selector_signup_mode"
+        )
         
+        # Map the selected display name back to the actual sheet name
+        actual_sheet_name = current_day_sheet_name if selected_display_name == "Today" else selected_display_name
+
+        st.subheader(f"Sign-up for {selected_display_name} Flights") 
         name = st.text_input("Enter your name:", key="manual_name")
 
-        for i, display_day_name in enumerate(tab_display_names): # Iterate through display names
-            # Map the display name back to the actual sheet name
-            actual_sheet_name = current_day_sheet_name if display_day_name == "Today" else display_day_name
-            
-            with tabs[i]:
-                st.subheader(f"Sign-up for {display_day_name} Flights") # Updated subheader for manual sign-up
-                if name.strip():
-                    df = get_sheet_data(gc, actual_sheet_name)
-                    if df is not None and not df.empty:
-                        sheet_to_update = sheet_map[actual_sheet_name]
-                        flight_num_col_idx = df.columns.get_loc("FLIGHT OUT") + 1
-                        observer_col_idx = df.columns.get_loc("Observers") + 1
-                        live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
+        if name.strip():
+            df = get_sheet_data(gc, actual_sheet_name)
+            if df is not None and not df.empty:
+                sheet_to_update = sheet_map[actual_sheet_name]
+                flight_num_col_idx = df.columns.get_loc("FLIGHT OUT") + 1
+                observer_col_idx = df.columns.get_loc("Observers") + 1
+                live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
 
-                        for j, row in df.iterrows():
-                            sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
-                            flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
-                            flight_num_to_update = str(row['FLIGHT OUT'])
+                for j, row in df.iterrows():
+                    sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
+                    flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
+                    flight_num_to_update = str(row['FLIGHT OUT'])
 
-                            if st.button(flight_label, key=f"manual_{actual_sheet_name}_{flight_num_to_update}_{j}"):
-                                try:
-                                    sheet_row = live_flight_nums.index(flight_num_to_update) + 1
-                                    current_observers_str = sheet_to_update.cell(sheet_row, observer_col_idx).value or ""
-                                    observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip()]
+                    if st.button(flight_label, key=f"manual_{actual_sheet_name}_{flight_num_to_update}_{j}"):
+                        try:
+                            sheet_row = live_flight_nums.index(flight_num_to_update) + 1
+                            current_observers_str = sheet_to_update.cell(sheet_row, observer_col_idx).value or ""
+                            observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip()]
 
-                                    if name.strip() not in observers_list:
-                                        observers_list.append(name.strip())
-                                        new_observers = ", ".join(observers_list)
-                                        sheet_to_update.update_cell(sheet_row, observer_col_idx, new_observers)
-                                        st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']} on {actual_sheet_name}!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.warning(f"You are already signed up for this flight on {actual_sheet_name}.")
-                                except ValueError:
-                                    st.error(f"Could not find flight {flight_num_to_update} in the sheet for {actual_sheet_name}. It may have been changed. Please refresh.")
-                                except Exception as e:
-                                    st.error(f"An error occurred: {e}")
-                    else:
-                        st.info(f"No flight data available for {actual_sheet_name}.")
-                else:
-                    st.warning("Please enter your name to sign up for flights.")
+                            if name.strip() not in observers_list:
+                                observers_list.append(name.strip())
+                                new_observers = ", ".join(observers_list)
+                                sheet_to_update.update_cell(sheet_row, observer_col_idx, new_observers)
+                                st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']} on {actual_sheet_name}!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.warning(f"You are already signed up for this flight on {actual_sheet_name}.")
+                        except ValueError:
+                            st.error(f"Could not find flight {flight_num_to_update} in the sheet for {actual_sheet_name}. It may have been changed. Please refresh.")
+                        except Exception as e:
+                            st.error(f"An error occurred: {e}")
+            else:
+                st.info(f"No flight data available for {actual_sheet_name}.")
+        else:
+            st.warning("Please enter your name to sign up for flights.")
 
     # ==============================================================================
     # --- MODE 4: TRACKER ---
