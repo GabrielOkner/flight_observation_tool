@@ -37,6 +37,11 @@ def get_sheet_data(_gc, sheet_name):
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
         
+        # DEBUGGING STEP: List all available sheet names
+        all_worksheets = master_sheet.worksheets()
+        available_sheet_titles = [ws.title for ws in all_worksheets]
+        st.info(f"Available Sheets in Spreadsheet: {available_sheet_titles}")
+        
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records() # This will reassign data if successful
         
@@ -48,6 +53,7 @@ def get_sheet_data(_gc, sheet_name):
 
         # --- FIX: Strip whitespace from all column names ---
         df.columns = df.columns.str.strip()
+        st.info(f"DataFrame Columns (after stripping whitespace): {df.columns.tolist()}") # Debugging line
 
         # --- Data Cleaning and Type Conversion ---
         def parse_and_localize_time(time_str):
@@ -127,6 +133,10 @@ try:
                 tab_display_names.append("Today")
             else:
                 tab_display_names.append(day)
+
+        # DEBUGGING STEP: Show the reordered tab names
+        st.info(f"Current Day (from system): {current_day_sheet_name}")
+        st.info(f"Tabs being created (reordered): {tab_display_names}")
 
         # Create tabs for the specified days of the week. The order of 'tab_display_names'
         # will determine the default active tab.
