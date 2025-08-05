@@ -30,10 +30,23 @@ def get_sheet_data(sheet_name):
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
+
         # --- Data Cleaning and Type Conversion ---
+        def parse_and_combine_time(time_str):
+            """Safely parse time strings and combine with today's date."""
+            if not time_str or pd.isna(time_str):
+                return pd.NaT
+            try:
+                # Attempt to parse time, coercing errors to NaT (Not a Time)
+                time_obj = pd.to_datetime(time_str, format='%H:%M', errors='coerce').time()
+                if pd.notna(time_obj):
+                    return datetime.combine(datetime.today(), time_obj)
+                return pd.NaT
+            except (ValueError, TypeError):
+                return pd.NaT
+
         for col in ['Est. Boarding Start', 'Est. Boarding End', 'SCHED DEP']:
-             # Combine a fixed date with the time to create a full datetime object for calculations
-            df[col] = df[col].apply(lambda x: datetime.combine(datetime.today(), pd.to_datetime(x, format='%H:%M', errors='coerce').time()) if pd.notna(x) else pd.NaT)
+            df[col] = df[col].apply(parse_and_combine_time)
 
         df['Flight Num'] = df['Flight Num'].astype(str)
         df['Observers'] = df['Observers'].astype(str)
@@ -127,6 +140,8 @@ elif st.session_state.mode == "suggest":
                 end_datetime = datetime.combine(datetime.today(), end_time_input)
 
                 available_flights = flights_df[
+                    (flights_df['Est. Boarding Start'].notna()) &
+                    (flights_df['Est. Boarding End'].notna()) &
                     (flights_df['Est. Boarding Start'] >= start_datetime) &
                     (flights_df['Est. Boarding End'] <= end_datetime) &
                     (flights_df['Observers'] == '')
@@ -165,7 +180,7 @@ elif st.session_state.mode == "suggest":
             display_df['Board Start'] = display_df['Est. Boarding Start'].dt.strftime('%I:%M %p')
             display_df['Board End'] = display_df['Est. Boarding End'].dt.strftime('%I:%M %p')
 
-            st.dataframe(display_df[list(display_cols.keys())].rename(columns=display_cols), hide_index=True)
+            st.dataframe(display_df[list(display_cols.keys())].rename(columns=cols_to_display), hide_index=True)
 
 
             if st.button("Confirm & Sign Up For This Schedule"):
@@ -207,7 +222,7 @@ elif st.session_state.mode == "signup":
                 if st.button(flight_label, key=f"manual_{i}"):
                     observer_col_index = df.columns.get_loc("Observers") + 1
                     current_observers = row['Observers']
-                    new_observers = f"{current_observers}, {name}" if current_observers else name
+                    new_observers = f"{current_observers}, {name}" if current_observers and current_observers != '' else name
                     sheet_map[current_sheet_name].update_cell(i + 2, observer_col_index, new_observers)
                     st.success(f"Signed up for {flight_label}!")
                     st.cache_data.clear()
@@ -217,4 +232,27 @@ elif st.session_state.mode == "signup":
 # --- MODE 4: TRACKER (Your existing logic) ---
 # ==============================================================================
 elif st.session_state.mode == "tracker":
-    st.subhea
+    st.subheader("Observer Sign-Up Tracker")
+    GOAL_PER_CATEGORY = 10
+    summary_data = []
+    for sheet_name in sheet_map.keys():
+        df_sheet = get_sheet_data(sheet_name)
+        if df_sheet is not None and "Observers" in df_sheet.columns and "Fleet Type Grouped" in df_sheet.columns:
+            for _, row in df_sheet.iterrows():
+                num_signups = len(row["Observers"].split(",")) if row["Observers"] and row["Observers"] != '' else 0
+                category = str(row["Fleet Type Grouped"]).strip().lower()
+                if category in {"widebody", "narrowbody", "express"}:
+                    summary_data.append({"Day": sheet_name, "Category": category, "Signups": num_signups})
+    
+    if summary_data:
+        df_summary = pd.DataFrame(summary_data)
+        chart_data = df_summary.pivot_table(index="Day", columns="Category", values="Signups", aggfunc="sum", fill_value=0)
+        st.markdown("### Signups by Day and Category")
+        st.dataframe(chart_data)
+
+        total_by_category = chart_data.sum()
+        st.markdown("### Total Progress Toward Goals")
+        for category in ["widebody", "narrowbody", "express"]:
+            count = total_by_category.get(category, 0)
+            progress = min(count / GOAL_PER_CATEGORY, 1.0)
+            st.progress(progress, text=f"{category.capitalize()}: {int(count)}/{GOAL_PER_CATEGORY}")
