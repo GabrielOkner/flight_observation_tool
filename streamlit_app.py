@@ -37,11 +37,6 @@ def get_sheet_data(_gc, sheet_name):
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
         
-        # DEBUGGING STEP: List all available sheet names
-        all_worksheets = master_sheet.worksheets()
-        available_sheet_titles = [ws.title for ws in all_worksheets]
-        st.info(f"Available Sheets in Spreadsheet: {available_sheet_titles}")
-        
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records() # This will reassign data if successful
         
@@ -53,7 +48,6 @@ def get_sheet_data(_gc, sheet_name):
 
         # --- FIX: Strip whitespace from all column names ---
         df.columns = df.columns.str.strip()
-        st.info(f"DataFrame Columns (after stripping whitespace): {df.columns.tolist()}") # Debugging line
 
         # --- Data Cleaning and Type Conversion ---
         def parse_and_localize_time(time_str):
@@ -105,11 +99,27 @@ try:
         st.session_state.mode = "today"
     if "suggested_schedule" not in st.session_state:
         st.session_state.suggested_schedule = None
+    # Initialize active_tab if not set, default to 'Today' or the first available tab
+    if "active_tab" not in st.session_state:
+        today_date = datetime.now(CENTRAL_TZ)
+        current_day_sheet_name = today_date.strftime("%A")
+        if current_day_sheet_name in available_tabs:
+            st.session_state.active_tab = "Today"
+        else:
+            st.session_state.active_tab = available_tabs[0] # Default to Monday if current day is not in the list
+
 
     # --- UI: Mode Selection Buttons ---
     col1, col2, col3, col4 = st.columns(4)
     if col1.button("Today's Flights", use_container_width=True):
         st.session_state.mode = "today"
+        # Reset active_tab to 'Today' when 'Today\'s Flights' button is clicked
+        today_date = datetime.now(CENTRAL_TZ)
+        current_day_sheet_name = today_date.strftime("%A")
+        if current_day_sheet_name in available_tabs:
+            st.session_state.active_tab = "Today"
+        else:
+            st.session_state.active_tab = available_tabs[0] # Default to Monday if current day is not in the list
     if col2.button("Suggest My Schedule", use_container_width=True):
         st.session_state.mode = "suggest"
     if col3.button("Manual Sign-up", use_container_width=True):
@@ -134,67 +144,61 @@ try:
             else:
                 tab_display_names.append(day)
 
-        # DEBUGGING STEP: Show the reordered tab names
-        st.info(f"Current Day (from system): {current_day_sheet_name}")
-        st.info(f"Tabs being created (reordered): {tab_display_names}")
-
-        # Create tabs for the specified days of the week. The order of 'tab_display_names'
-        # will determine the default active tab.
+        # Create tabs for the specified days of the week.
+        # We need to manually set the selected tab using st.session_state
         tabs = st.tabs(tab_display_names)
 
-        # Loop through tabs and display data for the corresponding day
-        for i, display_day_name in enumerate(tab_display_names): # Iterate through display names
-            # Map the display name back to the actual sheet name
-            actual_sheet_name = current_day_sheet_name if display_day_name == "Today" else display_day_name
-            
-            with tabs[i]:
-                # Updated subheader to reflect the selected tab's day
-                st.subheader(f"Flights for {display_day_name}") 
-                df = get_sheet_data(gc, actual_sheet_name)
-                if df is not None and not df.empty:
-                    # Filter out rows with invalid boarding start times first for all cases
-                    valid_times_df = df.dropna(subset=['Est. Boarding Start'])
-                    
-                    # Determine which flights to display based on the day
-                    if actual_sheet_name == current_day_sheet_name:
-                        now_datetime = datetime.now(CENTRAL_TZ)
-                        # For today's tab, show only upcoming flights
-                        display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
-                    else:
-                        # For other days (Monday, Wednesday), show all flights with valid times
-                        display_df = valid_times_df.copy()
-                         
-                    if not display_df.empty:
-                        cols_to_display = {
-                            "DEP GATE": "Gate", 
-                            "FLIGHT OUT": "Flight", 
-                            "ARR": "Dest",
-                            "SCHED DEP": "ETD (Sched Dep)", 
-                            "Est. Boarding Start": "Board Start", 
-                            "Est. Boarding End": "Board End",
-                            "PAX TOTAL": "Pax", 
-                            "Important flight?": "Important", 
-                            "Observers": "Observers"
-                        }
-                        
-                        # Filter cols_to_display to only include columns actually present in display_df
-                        actual_cols_to_display = {k: v for k, v in cols_to_display.items() if k in display_df.columns}
-                        
-                        final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
-                        
-                        # Format time columns if they exist
-                        if 'Board Start' in final_display_df.columns:
-                            final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
-                        if 'Board End' in final_display_df.columns:
-                            final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-                        if 'ETD (Sched Dep)' in final_display_df.columns: 
-                            final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
+        # Find the index of the currently active tab
+        try:
+            active_tab_index = tab_display_names.index(st.session_state.active_tab)
+        except ValueError:
+            active_tab_index = 0 # Fallback if active_tab is not found (shouldn't happen with proper init)
 
-                        st.dataframe(final_display_df, hide_index=True, use_container_width=True)
-                    else:
-                        st.info(f"No flights to display for {actual_sheet_name} based on criteria.")
+        # Display content based on the active tab
+        display_day_name = tab_display_names[active_tab_index]
+        actual_sheet_name = current_day_sheet_name if display_day_name == "Today" else display_day_name
+
+        with tabs[active_tab_index]: # Use the determined active tab for content display
+            st.subheader(f"Flights for {display_day_name}") 
+            df = get_sheet_data(gc, actual_sheet_name)
+            if df is not None and not df.empty:
+                valid_times_df = df.dropna(subset=['Est. Boarding Start'])
+                
+                if actual_sheet_name == current_day_sheet_name:
+                    now_datetime = datetime.now(CENTRAL_TZ)
+                    display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
                 else:
-                    st.info(f"No flight data available for {actual_sheet_name}.")
+                    display_df = valid_times_df.copy()
+                     
+                if not display_df.empty:
+                    cols_to_display = {
+                        "DEP GATE": "Gate", 
+                        "FLIGHT OUT": "Flight", 
+                        "ARR": "Dest",
+                        "SCHED DEP": "ETD (Sched Dep)", 
+                        "Est. Boarding Start": "Board Start", 
+                        "Est. Boarding End": "Board End",
+                        "PAX TOTAL": "Pax", 
+                        "Important flight?": "Important", 
+                        "Observers": "Observers"
+                    }
+                    
+                    actual_cols_to_display = {k: v for k, v in cols_to_display.items() if k in display_df.columns}
+                    
+                    final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
+                    
+                    if 'Board Start' in final_display_df.columns:
+                        final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                    if 'Board End' in final_display_df.columns:
+                        final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                    if 'ETD (Sched Dep)' in final_display_df.columns: 
+                        final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
+
+                    st.dataframe(final_display_df, hide_index=True, use_container_width=True)
+                else:
+                    st.info(f"No flights to display for {actual_sheet_name} based on criteria.")
+            else:
+                st.info(f"No flight data available for {actual_sheet_name}.")
 
     # ==============================================================================
     # --- MODE 2: SUGGEST MY SCHEDULE ---
