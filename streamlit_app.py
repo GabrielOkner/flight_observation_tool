@@ -10,7 +10,7 @@ st.set_page_config(page_title="Flight Observer", layout="wide")
 st.title("IAH Flight Observation Tool")
 
 # --- Constants and Timezone ---
-CENTRAL_TZ = pytz.timezone("America/Chicago")
+CENTRAL_TZ = pytup.timezone("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
 # --- Authorization & Data Loading (Cached) ---
@@ -37,12 +37,11 @@ def get_sheet_data(_gc, sheet_name):
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
         
-        # --- DEBUGGING STEP: List all available sheet names ---
-        all_worksheets = master_sheet.worksheets()
-        available_sheet_titles = [ws.title for ws in all_worksheets]
-        st.info(f"Available Sheets in Spreadsheet: {available_sheet_titles}")
-        # --- END DEBUGGING STEP ---
-
+        # Removed: DEBUGGING STEP: List all available sheet names
+        # all_worksheets = master_sheet.worksheets()
+        # available_sheet_titles = [ws.title for ws in all_worksheets]
+        # st.info(f"Available Sheets in Spreadsheet: {available_sheet_titles}")
+        
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records() # This will reassign data if successful
         
@@ -54,8 +53,8 @@ def get_sheet_data(_gc, sheet_name):
 
         # --- FIX: Strip whitespace from all column names ---
         df.columns = df.columns.str.strip()
-        st.info(f"DataFrame Columns (after stripping whitespace): {df.columns.tolist()}") # Debugging line
-        # --- End FIX ---
+        # Removed: Debugging line for DataFrame Columns
+        # st.info(f"DataFrame Columns (after stripping whitespace): {df.columns.tolist()}") 
 
         # --- Data Cleaning and Type Conversion ---
         def parse_and_localize_time(time_str):
@@ -158,11 +157,11 @@ try:
                         now_datetime = datetime.now(CENTRAL_TZ)
                         # For today's tab, show only upcoming flights
                         display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
-                        st.info(f"Displaying **upcoming flights** for {day}.")
+                        # Removed: st.info(f"Displaying **upcoming flights** for {day}.")
                     else:
                         # For other days (Monday, Wednesday), show all flights with valid times
                         display_df = valid_times_df.copy()
-                        st.info(f"Displaying **all flights** with valid boarding times for {day}.")
+                        # Removed: st.info(f"Displaying **all flights** with valid boarding times for {day}.")
                          
                     if not display_df.empty:
                         cols_to_display = {
