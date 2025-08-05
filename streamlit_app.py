@@ -131,7 +131,7 @@ try:
         st.session_state.suggested_schedule = None
 
     # --- UI: Mode Selection Buttons ---
-    col1, col2, col3, col4 = st.columns(4) # Removed col5
+    col1, col2, col3, col4 = st.columns(4) 
     if col1.button("Today's Flights", use_container_width=True):
         st.session_state.mode = "today"
     if col2.button("Suggest My Schedule", use_container_width=True):
@@ -221,11 +221,12 @@ try:
         df = get_sheet_data(gc, current_day_sheet_name) # Get today's flight data
 
         if df is not None and not df.empty:
-            name = st.text_input("Enter your name:", key="suggest_name")
+            # Removed: name = st.text_input("Enter your name:", key="suggest_name")
 
             # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
             time_options = []
-            today_date_for_slider = datetime.now(CENTRAL_TZ).date() # Use a fixed date for slider datetime objects
+            # Use a fixed date (e.g., today's date) for slider datetime objects to ensure consistent comparison
+            today_date_for_slider = datetime.combine(date.today(), time(0,0)).date() 
             for hour in range(7, 24): # 7 AM to 11 PM
                 time_options.append(datetime.combine(today_date_for_slider, time(hour, 0)))
                 if hour < 23: # Add 30-minute intervals, but not past 11:00 PM
@@ -249,7 +250,7 @@ try:
                 min_value=time_options[0],
                 max_value=time_options[-1],
                 value=time_options[start_index],
-                format="%-I:%M %p",
+                format="%-I:%M %p", # Corrected format string for time display
                 key="suggest_start_time_slider"
             )
             end_time_input_dt = c2.slider(
@@ -257,7 +258,7 @@ try:
                 min_value=time_options[0],
                 max_value=time_options[-1],
                 value=time_options[end_index],
-                format="%-I:%M %p",
+                format="%-I:%M %p", # Corrected format string for time display
                 key="suggest_end_time_slider"
             )
             
@@ -265,119 +266,120 @@ try:
             user_start_time = start_time_input_dt.time()
             user_end_time = end_time_input_dt.time()
 
-            if st.button("Suggest My Schedule", use_container_width=True):
-                if not name.strip():
-                    st.warning("Please enter your name.")
-                else:
-                    with st.spinner("Generating suggested schedule..."):
-                        # Prepare all flights for the day (ignore existing observers for suggestion)
-                        all_flights_for_scheduling = df[
-                            (df['Has Equipment'] == 'Yes') &
-                            (df['Est. Boarding Start'].notna()) &
-                            (df['Est. Boarding End'].notna())
+            # Using a unique key for the button to resolve the error
+            if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
+                # Removed: if not name.strip(): st.warning("Please enter your name.")
+                # The 'name' input is removed, so no need to check it
+                with st.spinner("Generating suggested schedule..."):
+                    # Prepare all flights for the day (ignore existing observers for suggestion)
+                    all_flights_for_scheduling = df[
+                        (df['Has Equipment'] == 'Yes') &
+                        (df['Est. Boarding Start'].notna()) &
+                        (df['Est. Boarding End'].notna())
+                    ].copy()
+
+                    # Convert 'Important flight?' to boolean
+                    if 'Important flight?' in all_flights_for_scheduling.columns:
+                        all_flights_for_scheduling['isImportant'] = all_flights_for_scheduling['Important flight?'].apply(lambda x: str(x).strip().lower() == 'yes')
+                    else:
+                        all_flights_for_scheduling['isImportant'] = False
+                        st.warning("Warning: 'Important flight?' column not found in flight data. All flights treated as not important for scheduling.")
+
+                    # Calculate busyStart and busyEnd for flights
+                    all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
+                    all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
+
+                    # Create a single "virtual" observer for the user's schedule request
+                    # Since 'name' is removed, we can use a placeholder or remove the name field if not needed elsewhere
+                    user_observer_state = {
+                        'name': "User", # Placeholder name
+                        'startTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_start_time)),
+                        'endTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_end_time)),
+                        'schedule': [],
+                        'lastFlight': None
+                    }
+
+                    # The available flights pool starts with all relevant flights
+                    available_flights_pool = all_flights_for_scheduling.copy()
+
+                    # --- Scheduling Logic (adapted from Phase 2 of original script) ---
+                    # This is a greedy single-observer assignment.
+                    assignments_made_in_round = True
+                    while assignments_made_in_round and not available_flights_pool.empty:
+                        assignments_made_in_round = False
+
+                        potential_next_flights = pd.DataFrame()
+                        
+                        current_observer_end_time = user_observer_state['endTime']
+                        current_observer_start_time = user_observer_state['startTime']
+                        last_flight_busy_end = user_observer_state['lastFlight']['busyEnd'] if user_observer_state['lastFlight'] else current_observer_start_time
+
+                        potential_next_flights = available_flights_pool[
+                            (available_flights_pool['Est. Boarding Start'] >= last_flight_busy_end) &
+                            (available_flights_pool['Est. Boarding End'] <= current_observer_end_time)
                         ].copy()
 
-                        # Convert 'Important flight?' to boolean
-                        if 'Important flight?' in all_flights_for_scheduling.columns:
-                            all_flights_for_scheduling['isImportant'] = all_flights_for_scheduling['Important flight?'].apply(lambda x: str(x).strip().lower() == 'yes')
-                        else:
-                            all_flights_for_scheduling['isImportant'] = False
-                            st.warning("Warning: 'Important flight?' column not found in flight data. All flights treated as not important for scheduling.")
-
-                        # Calculate busyStart and busyEnd for flights
-                        all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
-                        all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
-
-                        # Create a single "virtual" observer for the user's schedule request
-                        user_observer_state = {
-                            'name': name.strip(),
-                            'startTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_start_time)),
-                            'endTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_end_time)),
-                            'schedule': [],
-                            'lastFlight': None
-                        }
-
-                        # The available flights pool starts with all relevant flights
-                        available_flights_pool = all_flights_for_scheduling.copy()
-
-                        # --- Scheduling Logic (adapted from Phase 2 of original script) ---
-                        # This is a greedy single-observer assignment.
-                        assignments_made_in_round = True
-                        while assignments_made_in_round and not available_flights_pool.empty:
-                            assignments_made_in_round = False
-
-                            potential_next_flights = pd.DataFrame()
+                        if not potential_next_flights.empty:
+                            potential_next_flights['downtime'] = potential_next_flights.apply(
+                                lambda row: (row['busyStart'] - last_flight_busy_end).total_seconds() / 60
+                                if user_observer_state['lastFlight'] else 0, axis=1
+                            )
+                            potential_next_flights['importance_score'] = potential_next_flights['isImportant'].apply(lambda x: 0 if x else 1)
                             
-                            current_observer_end_time = user_observer_state['endTime']
-                            current_observer_start_time = user_observer_state['startTime']
-                            last_flight_busy_end = user_observer_state['lastFlight']['busyEnd'] if user_observer_state['lastFlight'] else current_observer_start_time
-
-                            potential_next_flights = available_flights_pool[
-                                (available_flights_pool['Est. Boarding Start'] >= last_flight_busy_end) &
-                                (available_flights_pool['Est. Boarding End'] <= current_observer_end_time)
-                            ].copy()
-
-                            if not potential_next_flights.empty:
-                                potential_next_flights['downtime'] = potential_next_flights.apply(
-                                    lambda row: (row['busyStart'] - last_flight_busy_end).total_seconds() / 60
-                                    if user_observer_state['lastFlight'] else 0, axis=1
+                            # Ensure 'DEP GATE' is used for gate parsing
+                            last_gate_parsed = parse_gate(user_observer_state['lastFlight']['DEP GATE']) if user_observer_state['lastFlight'] else None
+                            potential_next_flights['gate_score'] = potential_next_flights['DEP GATE'].apply(
+                                lambda gate: (
+                                    abs(parse_gate(gate)['number'] - last_gate_parsed['number']) / 10
+                                    if last_gate_parsed and parse_gate(gate)['concourse'] == last_gate_parsed['concourse']
+                                    else 15
                                 )
-                                potential_next_flights['importance_score'] = potential_next_flights['isImportant'].apply(lambda x: 0 if x else 1)
-                                
-                                # Ensure 'DEP GATE' is used for gate parsing
-                                last_gate_parsed = parse_gate(user_observer_state['lastFlight']['DEP GATE']) if user_observer_state['lastFlight'] else None
-                                potential_next_flights['gate_score'] = potential_next_flights['DEP GATE'].apply(
-                                    lambda gate: (
-                                        abs(parse_gate(gate)['number'] - last_gate_parsed['number']) / 10
-                                        if last_gate_parsed and parse_gate(gate)['concourse'] == last_gate_parsed['concourse']
-                                        else 15
-                                    )
-                                )
+                            )
 
-                                potential_next_flights = potential_next_flights.sort_values(
-                                    by=['importance_score', 'downtime', 'gate_score']
-                                )
+                            potential_next_flights = potential_next_flights.sort_values(
+                                by=['importance_score', 'downtime', 'gate_score']
+                            )
 
-                                best_choice = potential_next_flights.iloc[0]
-                                
-                                user_observer_state['schedule'].append(best_choice.to_dict())
-                                user_observer_state['lastFlight'] = best_choice.to_dict()
-                                available_flights_pool = available_flights_pool[available_flights_pool['FLIGHT OUT'] != best_choice['FLIGHT OUT']]
-                                assignments_made_in_round = True
+                            best_choice = potential_next_flights.iloc[0]
+                            
+                            user_observer_state['schedule'].append(best_choice.to_dict())
+                            user_observer_state['lastFlight'] = best_choice.to_dict()
+                            available_flights_pool = available_flights_pool[available_flights_pool['FLIGHT OUT'] != best_choice['FLIGHT OUT']]
+                            assignments_made_in_round = True
+                    
+                    # Display the generated schedule
+                    if user_observer_state['schedule']:
+                        # Sort the individual's schedule by time before outputting
+                        user_observer_state['schedule'].sort(key=lambda f: f['Est. Boarding Start'])
                         
-                        # Display the generated schedule
-                        if user_observer_state['schedule']:
-                            # Sort the individual's schedule by time before outputting
-                            user_observer_state['schedule'].sort(key=lambda f: f['Est. Boarding Start'])
-                            
-                            final_output_data = []
-                            headers = ["Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"]
-                            
-                            previous_flight_end = None
-                            for flight in user_observer_state['schedule']:
-                                time_between = "---"
-                                if previous_flight_end:
-                                    diff_ms = (flight['Est. Boarding Start'] - previous_flight_end).total_seconds() * 1000
-                                    diff_mins = int(diff_ms / (60 * 1000))
-                                    hours = diff_mins // 60
-                                    mins = diff_mins % 60
-                                    time_between = f"{hours:01d}:{mins:02d}"
+                        final_output_data = []
+                        headers = ["Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"]
+                        
+                        previous_flight_end = None
+                        for flight in user_observer_state['schedule']:
+                            time_between = "---"
+                            if previous_flight_end:
+                                diff_ms = (flight['Est. Boarding Start'] - previous_flight_end).total_seconds() * 1000
+                                diff_mins = int(diff_ms / (60 * 1000))
+                                hours = diff_mins // 60
+                                mins = diff_mins % 60
+                                time_between = f"{hours:01d}:{mins:02d}"
 
-                                final_output_data.append([
-                                    flight['DEP GATE'],
-                                    flight['FLIGHT OUT'],
-                                    flight['ARR'],
-                                    flight['Est. Boarding Start'].strftime('%-I:%M %p'),
-                                    flight['Est. Boarding End'].strftime('%-I:%M %p'),
-                                    time_between
-                                ])
-                                previous_flight_end = flight['Est. Boarding End']
-                            
-                            st.session_state.suggested_schedule = pd.DataFrame(final_output_data, columns=headers)
-                            st.success(f"{name.strip()}, here is your suggested schedule:")
-                        else:
-                            st.session_state.suggested_schedule = pd.DataFrame()
-                            st.info("No available flights match your criteria for a suggested schedule.")
+                            final_output_data.append([
+                                flight['DEP GATE'],
+                                flight['FLIGHT OUT'],
+                                flight['ARR'],
+                                flight['Est. Boarding Start'].strftime('%-I:%M %p'),
+                                flight['Est. Boarding End'].strftime('%-I:%M %p'),
+                                time_between
+                            ])
+                            previous_flight_end = flight['Est. Boarding End']
+                        
+                        st.session_state.suggested_schedule = pd.DataFrame(final_output_data, columns=headers)
+                        st.success(f"Here is your suggested schedule:") # Removed name
+                    else:
+                        st.session_state.suggested_schedule = pd.DataFrame()
+                        st.info("No available flights match your criteria for a suggested schedule.")
 
             if st.session_state.suggested_schedule is not None and not st.session_state.suggested_schedule.empty:
                 st.dataframe(st.session_state.suggested_schedule, hide_index=True, use_container_width=True)
