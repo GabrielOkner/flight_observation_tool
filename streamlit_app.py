@@ -80,7 +80,8 @@ def get_sheet_data(_gc, sheet_name):
                 df[col] = df[col].apply(parse_and_localize_time)
 
         # Ensure other columns have the correct type
-        for col in ['Flight Num', 'Observers', 'Fleet Type Grouped']:
+        # Updated 'Flight Num' to 'FLIGHT OUT'
+        for col in ['FLIGHT OUT', 'Observers', 'Fleet Type Grouped']:
              if col in df.columns:
                  df[col] = df[col].astype(str)
 
@@ -160,9 +161,14 @@ try:
                          
                     if not upcoming_df.empty:
                         cols_to_display = {
-                            "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
-                            "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End",
-                            "PAX TOTAL": "Pax", "Important flight?": "Important", "Observers": "Observers"
+                            "DEP GATE": "Gate", 
+                            "FLIGHT OUT": "Flight", # Updated column name
+                            "ARR": "Dest",
+                            "Est. Boarding Start": "Board Start", 
+                            "Est. Boarding End": "Board End",
+                            "PAX TOTAL": "Pax", 
+                            "Important flight?": "Important", 
+                            "Observers": "Observers"
                         }
                         final_display_df = upcoming_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
                         
@@ -224,8 +230,11 @@ try:
                     st.success("Here is your suggested schedule:")
                     
                     display_cols = {
-                        "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
-                        "Est. Boarding Start": "Board Start", "Est. Boarding End": "Board End"
+                        "DEP GATE": "Gate", 
+                        "FLIGHT OUT": "Flight", # Updated column name
+                        "ARR": "Dest",
+                        "Est. Boarding Start": "Board Start", 
+                        "Est. Boarding End": "Board End"
                     }
                     final_display_df = st.session_state.suggested_schedule[list(display_cols.keys())].rename(columns=display_cols)
 
@@ -237,8 +246,10 @@ try:
                     if st.button("Confirm & Sign Up For This Schedule", use_container_width=True):
                         with st.spinner("Updating Google Sheet..."):
                             sheet_to_update = sheet_map[current_day_sheet_name]
-                            flights_to_update = st.session_state.suggested_schedule['Flight Num'].tolist()
-                            all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("Flight Num") + 1)
+                            # Updated 'Flight Num' to 'FLIGHT OUT'
+                            flights_to_update = st.session_state.suggested_schedule['FLIGHT OUT'].tolist()
+                            # Updated 'Flight Num' to 'FLIGHT OUT'
+                            all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("FLIGHT OUT") + 1)
                             observer_col_index = df.columns.get_loc("Observers") + 1
                             
                             cells_to_update = []
@@ -282,14 +293,16 @@ try:
                     df = get_sheet_data(gc, day)
                     if df is not None and not df.empty:
                         sheet_to_update = sheet_map[day]
-                        flight_num_col_idx = df.columns.get_loc("Flight Num") + 1
+                        # Updated 'Flight Num' to 'FLIGHT OUT'
+                        flight_num_col_idx = df.columns.get_loc("FLIGHT OUT") + 1
                         observer_col_idx = df.columns.get_loc("Observers") + 1
                         live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
 
                         for j, row in df.iterrows():
                             sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
                             flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
-                            flight_num_to_update = str(row['Flight Num'])
+                            # Updated 'Flight Num' to 'FLIGHT OUT'
+                            flight_num_to_update = str(row['FLIGHT OUT'])
 
                             if st.button(flight_label, key=f"manual_{day}_{flight_num_to_update}_{j}"):
                                 try:
