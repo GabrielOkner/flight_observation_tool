@@ -42,7 +42,7 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Monday 8/4"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+        selected_day = "Tuesday 8/5"  # REMEMBER TO CHANGE (Figure out how to make automatic)
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
