@@ -228,6 +228,10 @@ try:
                 if hour < 23: # Add 30-minute intervals, but not past 11:00 PM
                     time_options_time_only.append(time(hour, 30))
 
+            # Custom formatter for the slider to display time correctly
+            def format_time_for_slider(time_obj):
+                return time_obj.strftime("%-I:%M %p")
+
             # Find indices for default 9:00 AM and 5:00 PM
             default_start_time = time(9, 0)
             default_end_time = time(17, 0)
@@ -246,7 +250,7 @@ try:
                 min_value=time_options_time_only[0],
                 max_value=time_options_time_only[-1],
                 value=time_options_time_only[start_index],
-                format="%-I:%M %p", # Corrected format string for time display
+                format_func=format_time_for_slider, # Use the custom formatter
                 key="suggest_start_time_slider"
             )
             user_end_time = c2.slider(
@@ -254,7 +258,7 @@ try:
                 min_value=time_options_time_only[0],
                 max_value=time_options_time_only[-1],
                 value=time_options_time_only[end_index],
-                format="%-I:%M %p", # Corrected format string for time display
+                format_func=format_time_for_slider, # Use the custom formatter
                 key="suggest_end_time_slider"
             )
             
