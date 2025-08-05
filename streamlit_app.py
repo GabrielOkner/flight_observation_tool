@@ -32,13 +32,17 @@ def get_sheet_data(_gc, sheet_name):
     Fetch and process data for a given sheet name.
     The '_gc' parameter is included to ensure this function reruns when the connection object changes.
     """
+    # Initialize data to an empty list to prevent NameError if get_all_records fails
+    data = [] 
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
-        all_worksheets = master_sheet.worksheets()
-        sheet = all_worksheets[2] # e.g., 2 if it's the 3rd sheet        data = sheet.get_all_records()
+        sheet = master_sheet.worksheet(sheet_name)
+        data = sheet.get_all_records() # This will reassign data if successful
+        
         if not data:
             st.warning(f"Sheet '{sheet_name}' is empty.")
             return pd.DataFrame()
+        
         df = pd.DataFrame(data)
 
         # --- Data Cleaning and Type Conversion ---
