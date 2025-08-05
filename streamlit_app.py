@@ -92,7 +92,6 @@ try:
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
     
     # Define the days of the week for the tabs (only Monday, Tuesday, Wednesday)
-    # This is the full list of available tabs in chronological order.
     available_tabs = ["Monday", "Tuesday", "Wednesday"]
     
     # --- Session State Initialization ---
@@ -121,32 +120,33 @@ try:
     # --- MODE 1: TODAY'S FLIGHTS (Read-Only View) ---
     # ==============================================================================
     if st.session_state.mode == "today":
-        st.subheader(f"Upcoming Flights for {display_date}")
-        
-        # Dynamically reorder tabs so the current day is first, if it's one of the available tabs
-        if current_day_sheet_name in available_tabs:
-            # Remove current day from its position and insert at the beginning
-            reordered_day_names = [current_day_sheet_name] + [
-                day for day in available_tabs if day != current_day_sheet_name
-            ]
-        else:
-            # If current day is not in the limited list (e.g., Thursday), use the default order
-            reordered_day_names = available_tabs
+        # Determine the list of tab names, with "Today" replacing the current day
+        tab_display_names = []
+        for day in available_tabs:
+            if day == current_day_sheet_name:
+                tab_display_names.append("Today")
+            else:
+                tab_display_names.append(day)
 
-        # Create tabs for the specified days of the week. The order of 'reordered_day_names'
+        # Create tabs for the specified days of the week. The order of 'tab_display_names'
         # will determine the default active tab.
-        tabs = st.tabs(reordered_day_names)
+        tabs = st.tabs(tab_display_names)
 
         # Loop through tabs and display data for the corresponding day
-        for i, day in enumerate(reordered_day_names): # Iterate through reordered_day_names
+        for i, display_day_name in enumerate(tab_display_names): # Iterate through display names
+            # Map the display name back to the actual sheet name
+            actual_sheet_name = current_day_sheet_name if display_day_name == "Today" else display_day_name
+            
             with tabs[i]:
-                df = get_sheet_data(gc, day)
+                # Updated subheader to reflect the selected tab's day
+                st.subheader(f"Flights for {display_day_name}") 
+                df = get_sheet_data(gc, actual_sheet_name)
                 if df is not None and not df.empty:
                     # Filter out rows with invalid boarding start times first for all cases
                     valid_times_df = df.dropna(subset=['Est. Boarding Start'])
                     
                     # Determine which flights to display based on the day
-                    if day == current_day_sheet_name:
+                    if actual_sheet_name == current_day_sheet_name:
                         now_datetime = datetime.now(CENTRAL_TZ)
                         # For today's tab, show only upcoming flights
                         display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
@@ -182,9 +182,9 @@ try:
 
                         st.dataframe(final_display_df, hide_index=True, use_container_width=True)
                     else:
-                        st.info(f"No flights to display for {day} based on criteria.")
+                        st.info(f"No flights to display for {actual_sheet_name} based on criteria.")
                 else:
-                    st.info(f"No flight data available for {day}.")
+                    st.info(f"No flight data available for {actual_sheet_name}.")
 
     # ==============================================================================
     # --- MODE 2: SUGGEST MY SCHEDULE ---
@@ -292,24 +292,29 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "signup":
         st.subheader("Manual Flight Sign-up")
-        # Dynamically reorder tabs for manual sign-up as well
-        if current_day_sheet_name in available_tabs:
-            reordered_day_names = [current_day_sheet_name] + [
-                day for day in available_tabs if day != current_day_sheet_name
-            ]
-        else:
-            reordered_day_names = available_tabs
+        
+        # Determine the list of tab names, with "Today" replacing the current day
+        tab_display_names = []
+        for day in available_tabs:
+            if day == current_day_sheet_name:
+                tab_display_names.append("Today")
+            else:
+                tab_display_names.append(day)
 
-        tabs = st.tabs(reordered_day_names)
+        tabs = st.tabs(tab_display_names)
         
         name = st.text_input("Enter your name:", key="manual_name")
 
-        for i, day in enumerate(reordered_day_names): # Use reordered_day_names here
+        for i, display_day_name in enumerate(tab_display_names): # Iterate through display names
+            # Map the display name back to the actual sheet name
+            actual_sheet_name = current_day_sheet_name if display_day_name == "Today" else display_day_name
+            
             with tabs[i]:
+                st.subheader(f"Sign-up for {display_day_name} Flights") # Updated subheader for manual sign-up
                 if name.strip():
-                    df = get_sheet_data(gc, day)
+                    df = get_sheet_data(gc, actual_sheet_name)
                     if df is not None and not df.empty:
-                        sheet_to_update = sheet_map[day]
+                        sheet_to_update = sheet_map[actual_sheet_name]
                         flight_num_col_idx = df.columns.get_loc("FLIGHT OUT") + 1
                         observer_col_idx = df.columns.get_loc("Observers") + 1
                         live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
@@ -319,7 +324,7 @@ try:
                             flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
                             flight_num_to_update = str(row['FLIGHT OUT'])
 
-                            if st.button(flight_label, key=f"manual_{day}_{flight_num_to_update}_{j}"):
+                            if st.button(flight_label, key=f"manual_{actual_sheet_name}_{flight_num_to_update}_{j}"):
                                 try:
                                     sheet_row = live_flight_nums.index(flight_num_to_update) + 1
                                     current_observers_str = sheet_to_update.cell(sheet_row, observer_col_idx).value or ""
@@ -329,17 +334,17 @@ try:
                                         observers_list.append(name.strip())
                                         new_observers = ", ".join(observers_list)
                                         sheet_to_update.update_cell(sheet_row, observer_col_idx, new_observers)
-                                        st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']} on {day}!")
+                                        st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']} on {actual_sheet_name}!")
                                         st.cache_data.clear()
                                         st.rerun()
                                     else:
-                                        st.warning(f"You are already signed up for this flight on {day}.")
+                                        st.warning(f"You are already signed up for this flight on {actual_sheet_name}.")
                                 except ValueError:
-                                    st.error(f"Could not find flight {flight_num_to_update} in the sheet for {day}. It may have been changed. Please refresh.")
+                                    st.error(f"Could not find flight {flight_num_to_update} in the sheet for {actual_sheet_name}. It may have been changed. Please refresh.")
                                 except Exception as e:
                                     st.error(f"An error occurred: {e}")
                     else:
-                        st.info(f"No flight data available for {day}.")
+                        st.info(f"No flight data available for {actual_sheet_name}.")
                 else:
                     st.warning("Please enter your name to sign up for flights.")
 
