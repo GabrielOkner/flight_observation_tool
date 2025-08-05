@@ -157,7 +157,7 @@ try:
                     "DEP GATE": "Gate", 
                     "FLIGHT OUT": "Flight", 
                     "ARR": "Dest",
-                    "SCHED DEP": "ETD (Sched Dep)", 
+                    "SCHED DEP": "ETD", 
                     "Est. Boarding Start": "Board Start", 
                     "Est. Boarding End": "Board End",
                     "PAX TOTAL": "Pax", 
@@ -173,8 +173,8 @@ try:
                     final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                 if 'Board End' in final_display_df.columns:
                     final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-                if 'ETD (Sched Dep)' in final_display_df.columns: 
-                    final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
+                if 'ETD' in final_display_df.columns: 
+                    final_display_df['ETD'] = pd.to_datetime(final_display_df['ETD']).dt.strftime('%-I:%M %p')
 
                 st.dataframe(final_display_df, hide_index=True, use_container_width=True)
             else:
@@ -240,7 +240,7 @@ try:
                         "DEP GATE": "Gate", 
                         "FLIGHT OUT": "Flight", 
                         "ARR": "Dest",
-                        "SCHED DEP": "ETD (Sched Dep)", 
+                        "SCHED DEP": "ETD", 
                         "Est. Boarding Start": "Board Start", 
                         "Est. Boarding End": "Board End"
                     }
