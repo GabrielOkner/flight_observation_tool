@@ -12,6 +12,7 @@ st.title("IAH Flight Observation Tool")
 # --- Constants and Timezone ---
 CENTRAL_TZ = pytz.timezone("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
+DAILY_SHEET_NAME = "Today's Flights" # Use a fixed name for the daily sheet
 
 # --- Authorization & Data Loading (Cached) ---
 @st.cache_resource(ttl=600)
@@ -100,18 +101,17 @@ try:
     if col4.button("View Tracker", use_container_width=True):
         st.session_state.mode = "tracker"
 
-    # --- Dynamic Sheet Name Logic ---
+    # --- Date for Display ---
     today_date = datetime.now(CENTRAL_TZ)
-    # Use strftime codes that work on both Linux and Windows ('-' prefix is Linux-specific)
-    current_sheet_name = today_date.strftime("%A %m/%d").replace('/0', '/')
+    display_date = today_date.strftime("%A, %B %d")
 
 
     # ==============================================================================
     # --- MODE 1: TODAY'S FLIGHTS (Read-Only View) ---
     # ==============================================================================
     if st.session_state.mode == "today":
-        st.subheader(f"Upcoming Flights for {current_sheet_name}")
-        df = get_sheet_data(gc, current_sheet_name)
+        st.subheader(f"Upcoming Flights for {display_date}")
+        df = get_sheet_data(gc, DAILY_SHEET_NAME)
 
         if df is not None and not df.empty:
             now_datetime = datetime.now(CENTRAL_TZ)
@@ -142,7 +142,7 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "suggest":
         st.subheader("Get an Optimized Schedule Suggestion")
-        df = get_sheet_data(gc, current_sheet_name)
+        df = get_sheet_data(gc, DAILY_SHEET_NAME)
 
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="suggest_name")
@@ -200,7 +200,7 @@ try:
 
                     if st.button("Confirm & Sign Up For This Schedule", use_container_width=True):
                         with st.spinner("Updating Google Sheet..."):
-                            sheet_to_update = sheet_map[current_sheet_name]
+                            sheet_to_update = sheet_map[DAILY_SHEET_NAME]
                             flights_to_update = st.session_state.suggested_schedule['Flight Num'].tolist()
                             all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("Flight Num") + 1)
                             observer_col_index = df.columns.get_loc("Observers") + 1
@@ -229,12 +229,12 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "signup":
         st.subheader("Manual Flight Sign-up")
-        df = get_sheet_data(gc, current_sheet_name)
+        df = get_sheet_data(gc, DAILY_SHEET_NAME)
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="manual_name")
             if name.strip():
                 # Get the latest full column of flight numbers and observers for matching
-                sheet_to_update = sheet_map[current_sheet_name]
+                sheet_to_update = sheet_map[DAILY_SHEET_NAME]
                 flight_num_col_idx = df.columns.get_loc("Flight Num") + 1
                 observer_col_idx = df.columns.get_loc("Observers") + 1
                 live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
@@ -276,8 +276,9 @@ try:
         GOAL_PER_CATEGORY = 10
         summary_data = []
         
-        # Only check recent sheets to improve performance
-        relevant_sheet_names = [s.title for s in all_sheets] # In a real app, you might filter this list
+        # This will now check all sheets, but will primarily be useful if you keep old sheets with date names.
+        # If you only use "Today's Flights", the tracker will only show today's data.
+        relevant_sheet_names = [s.title for s in all_sheets] 
         
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
@@ -311,4 +312,3 @@ try:
 except Exception as e:
     st.error(f"A critical error occurred: {e}")
     st.info("Please check your Google Sheet permissions and ensure the sheet format is correct.")
-
