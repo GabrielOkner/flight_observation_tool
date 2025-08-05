@@ -221,55 +221,45 @@ try:
         df = get_sheet_data(gc, current_day_sheet_name) # Get today's flight data
 
         if df is not None and not df.empty:
-            # Removed: name = st.text_input("Enter your name:", key="suggest_name")
-
             # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
-            time_options = []
-            # Use a fixed date (e.g., today's date) for slider datetime objects to ensure consistent comparison
-            today_date_for_slider = datetime.combine(date.today(), time(0,0)).date() 
+            time_options_time_only = []
             for hour in range(7, 24): # 7 AM to 11 PM
-                time_options.append(datetime.combine(today_date_for_slider, time(hour, 0)))
+                time_options_time_only.append(time(hour, 0))
                 if hour < 23: # Add 30-minute intervals, but not past 11:00 PM
-                    time_options.append(datetime.combine(today_date_for_slider, time(hour, 30)))
+                    time_options_time_only.append(time(hour, 30))
 
             # Find indices for default 9:00 AM and 5:00 PM
-            default_start_dt = datetime.combine(today_date_for_slider, time(9, 0))
-            default_end_dt = datetime.combine(today_date_for_slider, time(17, 0))
+            default_start_time = time(9, 0)
+            default_end_time = time(17, 0)
 
             start_index = 0
-            if default_start_dt in time_options:
-                start_index = time_options.index(default_start_dt)
+            if default_start_time in time_options_time_only:
+                start_index = time_options_time_only.index(default_start_time)
 
-            end_index = len(time_options) - 1
-            if default_end_dt in time_options:
-                end_index = time_options.index(default_end_dt)
+            end_index = len(time_options_time_only) - 1
+            if default_end_time in time_options_time_only:
+                end_index = time_options_time_only.index(default_end_time)
 
             c1, c2 = st.columns(2)
-            start_time_input_dt = c1.slider(
+            user_start_time = c1.slider(
                 "Enter your start time:",
-                min_value=time_options[0],
-                max_value=time_options[-1],
-                value=time_options[start_index],
+                min_value=time_options_time_only[0],
+                max_value=time_options_time_only[-1],
+                value=time_options_time_only[start_index],
                 format="%-I:%M %p", # Corrected format string for time display
                 key="suggest_start_time_slider"
             )
-            end_time_input_dt = c2.slider(
+            user_end_time = c2.slider(
                 "Enter your end time:",
-                min_value=time_options[0],
-                max_value=time_options[-1],
-                value=time_options[end_index],
+                min_value=time_options_time_only[0],
+                max_value=time_options_time_only[-1],
+                value=time_options_time_only[end_index],
                 format="%-I:%M %p", # Corrected format string for time display
                 key="suggest_end_time_slider"
             )
             
-            # Extract just the time objects from the slider's datetime objects
-            user_start_time = start_time_input_dt.time()
-            user_end_time = end_time_input_dt.time()
-
             # Using a unique key for the button to resolve the error
             if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
-                # Removed: if not name.strip(): st.warning("Please enter your name.")
-                # The 'name' input is removed, so no need to check it
                 with st.spinner("Generating suggested schedule..."):
                     # Prepare all flights for the day (ignore existing observers for suggestion)
                     all_flights_for_scheduling = df[
@@ -290,7 +280,6 @@ try:
                     all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
 
                     # Create a single "virtual" observer for the user's schedule request
-                    # Since 'name' is removed, we can use a placeholder or remove the name field if not needed elsewhere
                     user_observer_state = {
                         'name': "User", # Placeholder name
                         'startTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_start_time)),
@@ -376,7 +365,7 @@ try:
                             previous_flight_end = flight['Est. Boarding End']
                         
                         st.session_state.suggested_schedule = pd.DataFrame(final_output_data, columns=headers)
-                        st.success(f"Here is your suggested schedule:") # Removed name
+                        st.success(f"Here is your suggested schedule:") 
                     else:
                         st.session_state.suggested_schedule = pd.DataFrame()
                         st.info("No available flights match your criteria for a suggested schedule.")
