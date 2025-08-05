@@ -87,8 +87,8 @@ try:
     all_sheets = master_sheet.worksheets()
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
     
-    # Define the days of the week for the tabs
-    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    # Define the days of the week for the tabs (only Monday, Tuesday, Wednesday)
+    day_names = ["Monday", "Tuesday", "Wednesday"]
     
     # --- Session State Initialization ---
     if "mode" not in st.session_state:
@@ -118,8 +118,15 @@ try:
     if st.session_state.mode == "today":
         st.subheader(f"Upcoming Flights for {display_date}")
         
-        # Create tabs for each day of the week
-        tabs = st.tabs(day_names)
+        # Determine the default selected tab
+        try:
+            default_tab_index = day_names.index(current_day_sheet_name)
+        except ValueError:
+            # If the current day is not in the limited list (e.g., Thursday), default to the first tab
+            default_tab_index = 0
+
+        # Create tabs for the specified days of the week, with the current day as default
+        tabs = st.tabs(day_names, default_tab_index)
 
         # Loop through tabs and display data for the corresponding day
         for i, day in enumerate(day_names):
