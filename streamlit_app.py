@@ -150,19 +150,24 @@ try:
             with tabs[i]:
                 df = get_sheet_data(gc, day)
                 if df is not None and not df.empty:
-                    now_datetime = datetime.now(CENTRAL_TZ)
+                    # Filter out rows with invalid boarding start times first for all cases
                     valid_times_df = df.dropna(subset=['Est. Boarding Start'])
                     
-                    # Filter for upcoming flights only on the current day's tab
+                    # Determine which flights to display based on the day
                     if day == current_day_sheet_name:
-                         upcoming_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
+                        now_datetime = datetime.now(CENTRAL_TZ)
+                        # For today's tab, show only upcoming flights
+                        display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
+                        st.info(f"Displaying **upcoming flights** for {day}.")
                     else:
-                         upcoming_df = valid_times_df.copy()
+                        # For other days (Monday, Wednesday), show all flights with valid times
+                        display_df = valid_times_df.copy()
+                        st.info(f"Displaying **all flights** with valid boarding times for {day}.")
                          
-                    if not upcoming_df.empty:
+                    if not display_df.empty:
                         cols_to_display = {
                             "DEP GATE": "Gate", 
-                            "FLIGHT OUT": "Flight", # Updated column name
+                            "FLIGHT OUT": "Flight", 
                             "ARR": "Dest",
                             "Est. Boarding Start": "Board Start", 
                             "Est. Boarding End": "Board End",
@@ -170,14 +175,21 @@ try:
                             "Important flight?": "Important", 
                             "Observers": "Observers"
                         }
-                        final_display_df = upcoming_df[list(cols_to_display.keys())].rename(columns=cols_to_display)
                         
-                        final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
-                        final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                        # Filter cols_to_display to only include columns actually present in display_df
+                        actual_cols_to_display = {k: v for k, v in cols_to_display.items() if k in display_df.columns}
+                        
+                        final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
+                        
+                        # Format time columns if they exist
+                        if 'Board Start' in final_display_df.columns:
+                            final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                        if 'Board End' in final_display_df.columns:
+                            final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
 
                         st.dataframe(final_display_df, hide_index=True, use_container_width=True)
                     else:
-                        st.info("No more upcoming flights for this day.")
+                        st.info(f"No flights to display for {day} based on criteria.")
                 else:
                     st.info(f"No flight data available for {day}.")
 
@@ -211,7 +223,13 @@ try:
                         (flights_df['Est. Boarding End'] <= end_datetime)
                     ].copy()
 
-                    available_flights['importance_score'] = available_flights['Important flight?'].apply(lambda x: 0 if x == 'Yes' else 1)
+                    # Robustly handle 'Important flight?' column
+                    if 'Important flight?' in available_flights.columns:
+                        available_flights['importance_score'] = available_flights['Important flight?'].apply(lambda x: 0 if x == 'Yes' else 1)
+                    else:
+                        st.warning("Warning: 'Important flight?' column not found for sorting. Flights will be sorted by boarding start time only.")
+                        available_flights['importance_score'] = 0 # All flights have same importance
+
                     available_flights = available_flights.sort_values(by=['importance_score', 'Est. Boarding Start'])
 
                     schedule = []
@@ -231,24 +249,27 @@ try:
                     
                     display_cols = {
                         "DEP GATE": "Gate", 
-                        "FLIGHT OUT": "Flight", # Updated column name
+                        "FLIGHT OUT": "Flight", 
                         "ARR": "Dest",
                         "Est. Boarding Start": "Board Start", 
                         "Est. Boarding End": "Board End"
                     }
-                    final_display_df = st.session_state.suggested_schedule[list(display_cols.keys())].rename(columns=display_cols)
+                    # Filter display_cols to only include columns actually present in the suggested schedule
+                    actual_display_cols = {k: v for k, v in display_cols.items() if k in st.session_state.suggested_schedule.columns}
 
-                    final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
-                    final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                    final_display_df = st.session_state.suggested_schedule[list(actual_display_cols.keys())].rename(columns=actual_display_cols)
+
+                    if 'Board Start' in final_display_df.columns:
+                        final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                    if 'Board End' in final_display_df.columns:
+                        final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
 
                     st.dataframe(final_display_df, hide_index=True, use_container_width=True)
 
                     if st.button("Confirm & Sign Up For This Schedule", use_container_width=True):
                         with st.spinner("Updating Google Sheet..."):
                             sheet_to_update = sheet_map[current_day_sheet_name]
-                            # Updated 'Flight Num' to 'FLIGHT OUT'
                             flights_to_update = st.session_state.suggested_schedule['FLIGHT OUT'].tolist()
-                            # Updated 'Flight Num' to 'FLIGHT OUT'
                             all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("FLIGHT OUT") + 1)
                             observer_col_index = df.columns.get_loc("Observers") + 1
                             
@@ -293,7 +314,6 @@ try:
                     df = get_sheet_data(gc, day)
                     if df is not None and not df.empty:
                         sheet_to_update = sheet_map[day]
-                        # Updated 'Flight Num' to 'FLIGHT OUT'
                         flight_num_col_idx = df.columns.get_loc("FLIGHT OUT") + 1
                         observer_col_idx = df.columns.get_loc("Observers") + 1
                         live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
@@ -301,7 +321,6 @@ try:
                         for j, row in df.iterrows():
                             sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
                             flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
-                            # Updated 'Flight Num' to 'FLIGHT OUT'
                             flight_num_to_update = str(row['FLIGHT OUT'])
 
                             if st.button(flight_label, key=f"manual_{day}_{flight_num_to_update}_{j}"):
