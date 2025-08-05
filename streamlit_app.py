@@ -88,7 +88,8 @@ try:
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
     
     # Define the days of the week for the tabs (only Monday, Tuesday, Wednesday)
-    day_names = ["Monday", "Tuesday", "Wednesday"]
+    # This is the full list of available tabs.
+    available_tabs = ["Monday", "Tuesday", "Wednesday"]
     
     # --- Session State Initialization ---
     if "mode" not in st.session_state:
@@ -118,19 +119,22 @@ try:
     if st.session_state.mode == "today":
         st.subheader(f"Upcoming Flights for {display_date}")
         
-        # Determine the default selected tab
-        try:
-            default_tab_index = day_names.index(current_day_sheet_name)
-        except ValueError:
-            # If the current day is not in the limited list (e.g., Thursday), default to the first tab
-            default_tab_index = 0
+        # Dynamically reorder tabs so the current day is first, if it's one of the available tabs
+        if current_day_sheet_name in available_tabs:
+            # Remove current day from its position and insert at the beginning
+            reordered_day_names = [current_day_sheet_name] + [
+                day for day in available_tabs if day != current_day_sheet_name
+            ]
+        else:
+            # If current day is not in available_tabs (e.g., Thursday), use the default order
+            reordered_day_names = available_tabs
 
-        # Create tabs for the specified days of the week, with the current day as default
-        # Corrected: Use selected_tab as a keyword argument
-        tabs = st.tabs(day_names, selected_tab=default_tab_index)
+        # Create tabs for the specified days of the week
+        # Removed 'selected_tab' as it's not supported in older Streamlit versions
+        tabs = st.tabs(reordered_day_names)
 
         # Loop through tabs and display data for the corresponding day
-        for i, day in enumerate(day_names):
+        for i, day in enumerate(reordered_day_names): # Use reordered_day_names here
             with tabs[i]:
                 df = get_sheet_data(gc, day)
                 if df is not None and not df.empty:
@@ -249,12 +253,19 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "signup":
         st.subheader("Manual Flight Sign-up")
-        # Create tabs for each day of the week
-        tabs = st.tabs(day_names)
+        # Dynamically reorder tabs for manual sign-up as well
+        if current_day_sheet_name in available_tabs:
+            reordered_day_names = [current_day_sheet_name] + [
+                day for day in available_tabs if day != current_day_sheet_name
+            ]
+        else:
+            reordered_day_names = available_tabs
+
+        tabs = st.tabs(reordered_day_names)
         
         name = st.text_input("Enter your name:", key="manual_name")
 
-        for i, day in enumerate(day_names):
+        for i, day in enumerate(reordered_day_names): # Use reordered_day_names here
             with tabs[i]:
                 if name.strip():
                     df = get_sheet_data(gc, day)
