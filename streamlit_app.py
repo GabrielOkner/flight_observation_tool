@@ -126,7 +126,8 @@ try:
             default_tab_index = 0
 
         # Create tabs for the specified days of the week, with the current day as default
-        tabs = st.tabs(day_names, default_tab_index)
+        # Corrected: Use selected_tab as a keyword argument
+        tabs = st.tabs(day_names, selected_tab=default_tab_index)
 
         # Loop through tabs and display data for the corresponding day
         for i, day in enumerate(day_names):
