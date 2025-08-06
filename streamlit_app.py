@@ -240,12 +240,19 @@ try:
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="suggest_name")
 
+            # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
+            # Store time objects directly
             time_options_time_only = []
             for hour in range(7, 24):
                 time_options_time_only.append(time(hour, 0))
                 if hour < 23:
                     time_options_time_only.append(time(hour, 30))
 
+            # Custom formatter function for st.slider
+            def format_slider_time(time_obj):
+                return time_obj.strftime("%I:%M %p")
+
+            # Find indices for default 9:00 AM and 5:00 PM
             default_start_time = time(9, 0)
             default_end_time = time(17, 0)
             start_index = time_options_time_only.index(default_start_time) if default_start_time in time_options_time_only else 0
@@ -257,7 +264,7 @@ try:
                 min_value=time_options_time_only[0],
                 max_value=time_options_time_only[-1],
                 value=time_options_time_only[start_index],
-                format="%I:%M %p", # Corrected format string for time display
+                format_func=format_slider_time, # Use format_func
                 key="suggest_start_time_slider"
             )
             user_end_time = c2.slider(
@@ -265,7 +272,7 @@ try:
                 min_value=time_options_time_only[0],
                 max_value=time_options_time_only[-1],
                 value=time_options_time_only[end_index],
-                format="%I:%M %p", # Corrected format string for time display
+                format_func=format_slider_time, # Use format_func
                 key="suggest_end_time_slider"
             )
             
