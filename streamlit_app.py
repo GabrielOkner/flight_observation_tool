@@ -498,42 +498,36 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
-        GOAL_PER_CATEGORY = 10
-        summary_data = []
+        
+        # Use a dictionary to store counts for each observer
+        observer_counts = {}
 
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         relevant_sheet_names = [s.title for s in all_sheets if s.title in days_of_week]
 
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
-            if df_sheet is not None and not df_sheet.empty and "Observers" in df_sheet.columns and "Fleet Type Grouped" in df_sheet.columns:
-                df_sheet.dropna(subset=["Observers", "Fleet Type Grouped"], inplace=True)
-                for _, row in df_sheet.iterrows():
-                    observers_str = str(row["Observers"])
-                    num_signups = len([obs for obs in observers_str.split(",") if obs.strip()])
-                    # --- FIX START ---
-                    # Use .strip() to remove whitespace and check against capitalized fleet types
-                    category = str(row["Fleet Type Grouped"]).strip()
-                    if category in {"Widebody", "Narrowbody", "Express"}:
-                    # --- FIX END ---
-                        summary_data.append({"Day": sheet_name, "Category": category, "Signups": num_signups})
+            # Check if the sheet has the 'Observers' column
+            if df_sheet is not None and not df_sheet.empty and "Observers" in df_sheet.columns:
+                # Drop rows where 'Observers' is empty or NaN to avoid errors
+                df_sheet.dropna(subset=["Observers"], inplace=True)
+                for observers_str in df_sheet["Observers"]:
+                    # Ensure it's a string before splitting
+                    observers_list = str(observers_str).split(',')
+                    for name in observers_list:
+                        # Clean up the name and increment the count
+                        clean_name = name.strip()
+                        if clean_name: # Make sure not to count empty strings
+                            observer_counts[clean_name] = observer_counts.get(clean_name, 0) + 1
 
-        if summary_data:
-            df_summary = pd.DataFrame(summary_data)
-            chart_data = df_summary.pivot_table(index="Day", columns="Category", values="Signups", aggfunc="sum", fill_value=0)
-
-            st.markdown("### Signups by Day and Category")
-            st.dataframe(chart_data, use_container_width=True)
-
-            total_by_category = chart_data.sum()
-            st.markdown("### Total Progress Toward Goals")
-            # --- FIX START ---
-            # Use capitalized fleet types in the loop to match the data
-            for category in ["Widebody", "Narrowbody", "Express"]:
-            # --- FIX END ---
-                count = total_by_category.get(category, 0)
-                progress = min(count / GOAL_PER_CATEGORY, 1.0) if GOAL_PER_CATEGORY > 0 else 0
-                st.progress(progress, text=f"{category.capitalize()}: {int(count)} / {GOAL_PER_CATEGORY}")
+        if observer_counts:
+            # Convert the dictionary to a DataFrame for display
+            df_observer_summary = pd.DataFrame(list(observer_counts.items()), columns=['Observer', 'Total Observations'])
+            # Sort by the number of observations in descending order
+            df_observer_summary = df_observer_summary.sort_values(by='Total Observations', ascending=False).reset_index(drop=True)
+            
+            st.markdown("### Observations per Observer")
+            st.dataframe(df_observer_summary, use_container_width=True)
         else:
             st.info("No tracking data available yet.")
 
