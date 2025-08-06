@@ -515,7 +515,7 @@ try:
                     observers_str = str(row["Observers"])
                     num_signups = len([obs for obs in observers_str.split(",") if obs.strip()])
                     category = str(row["Fleet Type Grouped"]).strip().lower()
-                    if category in {"widebody", "narrowbody", "express"}:
+                    if category in {"Widebody", "Narrowbody", "Express"}:
                         summary_data.append({"Day": sheet_name, "Category": category, "Signups": num_signups})
 
         if summary_data:
@@ -527,7 +527,7 @@ try:
 
             total_by_category = chart_data.sum()
             st.markdown("### Total Progress Toward Goals")
-            for category in ["widebody", "narrowbody", "express"]:
+            for category in ["Widebody", "Narrowbody", "Express"]:
                 count = total_by_category.get(category, 0)
                 progress = min(count / GOAL_PER_CATEGORY, 1.0) if GOAL_PER_CATEGORY > 0 else 0
                 st.progress(progress, text=f"{category.capitalize()}: {int(count)} / {GOAL_PER_CATEGORY}")
