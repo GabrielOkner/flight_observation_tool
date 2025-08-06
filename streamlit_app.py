@@ -501,11 +501,8 @@ try:
         GOAL_PER_CATEGORY = 10
         summary_data = []
 
-        # --- FIX START ---
-        # Define the days of the week to process, ignoring other sheets like 'Scheduler'
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         relevant_sheet_names = [s.title for s in all_sheets if s.title in days_of_week]
-        # --- FIX END ---
 
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
@@ -514,8 +511,11 @@ try:
                 for _, row in df_sheet.iterrows():
                     observers_str = str(row["Observers"])
                     num_signups = len([obs for obs in observers_str.split(",") if obs.strip()])
-                    category = str(row["Fleet Type Grouped"]).strip().lower()
+                    # --- FIX START ---
+                    # Use .strip() to remove whitespace and check against capitalized fleet types
+                    category = str(row["Fleet Type Grouped"]).strip()
                     if category in {"Widebody", "Narrowbody", "Express"}:
+                    # --- FIX END ---
                         summary_data.append({"Day": sheet_name, "Category": category, "Signups": num_signups})
 
         if summary_data:
@@ -527,7 +527,10 @@ try:
 
             total_by_category = chart_data.sum()
             st.markdown("### Total Progress Toward Goals")
+            # --- FIX START ---
+            # Use capitalized fleet types in the loop to match the data
             for category in ["Widebody", "Narrowbody", "Express"]:
+            # --- FIX END ---
                 count = total_by_category.get(category, 0)
                 progress = min(count / GOAL_PER_CATEGORY, 1.0) if GOAL_PER_CATEGORY > 0 else 0
                 st.progress(progress, text=f"{category.capitalize()}: {int(count)} / {GOAL_PER_CATEGORY}")
