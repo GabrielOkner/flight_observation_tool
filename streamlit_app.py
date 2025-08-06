@@ -243,16 +243,12 @@ try:
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="suggest_name")
 
-            # --- FIX START ---
-            # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
-            # Using st.select_slider is more robust for discrete options and fixes the format display issue.
             time_options = []
             for hour in range(7, 24):
                 time_options.append(time(hour, 0))
-                if hour < 23:  # Add 30-min interval for all hours except 11 PM
+                if hour < 23:
                     time_options.append(time(hour, 30))
 
-            # Define default start and end times
             default_start_time = time(9, 0)
             default_end_time = time(17, 0)
 
@@ -261,17 +257,16 @@ try:
                 "Enter your start time:",
                 options=time_options,
                 value=default_start_time,
-                format_func=lambda t: t.strftime('%-I:%M %p'), # Correctly formats the time for display
+                format_func=lambda t: t.strftime('%-I:%M %p'),
                 key="suggest_start_time_slider"
             )
             user_end_time = c2.select_slider(
                 "Enter your end time:",
                 options=time_options,
                 value=default_end_time,
-                format_func=lambda t: t.strftime('%-I:%M %p'), # Correctly formats the time for display
+                format_func=lambda t: t.strftime('%-I:%M %p'),
                 key="suggest_end_time_slider"
             )
-            # --- FIX END ---
 
             if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
                 if not name.strip():
@@ -293,15 +288,34 @@ try:
                         all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
                         all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
 
+                        # --- NEW LOGIC START ---
+                        # Find flights user is already signed up for
+                        pre_assigned_flights = all_flights_for_scheduling[
+                            all_flights_for_scheduling['Observers'].str.contains(name.strip(), case=False, na=False)
+                        ].copy()
+                        
+                        # Initialize schedule with pre-assigned flights
+                        schedule = []
+                        if not pre_assigned_flights.empty:
+                            pre_assigned_flights = pre_assigned_flights.sort_values(by='Est. Boarding Start')
+                            schedule = pre_assigned_flights.to_dict('records')
+                            st.info(f"Found {len(schedule)} pre-assigned flight(s) for {name.strip()}. Incorporating them into the schedule.")
+
                         user_observer_state = {
                             'name': name.strip(),
                             'startTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_start_time)),
                             'endTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_end_time)),
-                            'schedule': [],
-                            'lastFlight': None
+                            'schedule': schedule,
+                            'lastFlight': schedule[-1] if schedule else None
                         }
+                        
+                        # Exclude pre-assigned flights from the pool of available flights
+                        pre_assigned_flight_nums = [f['FLIGHT OUT'] for f in schedule]
+                        available_flights_pool = all_flights_for_scheduling[
+                            ~all_flights_for_scheduling['FLIGHT OUT'].isin(pre_assigned_flight_nums)
+                        ].copy()
+                        # --- NEW LOGIC END ---
 
-                        available_flights_pool = all_flights_for_scheduling.copy()
                         assignments_made_in_round = True
                         while assignments_made_in_round and not available_flights_pool.empty:
                             assignments_made_in_round = False
@@ -351,9 +365,12 @@ try:
                                     hours = diff_mins // 60
                                     mins = diff_mins % 60
                                     time_between = f"{hours:01d}:{mins:02d}"
+                                
+                                # Pre-assigned flights should be checked by default
+                                is_preassigned = flight['FLIGHT OUT'] in pre_assigned_flight_nums
 
                                 final_output_data.append([
-                                    False, # Checkbox state
+                                    is_preassigned, # Checkbox state
                                     flight['DEP GATE'],
                                     flight['FLIGHT OUT'],
                                     flight['ARR'],
@@ -374,18 +391,23 @@ try:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
 
+                # The 'select all' checkbox logic might need adjustment if users can't un-select pre-assigned flights.
+                # For now, we leave it as is, but it's a point for future consideration.
                 select_all = st.checkbox("Select all flights", key="select_all_checkbox")
+                
+                schedule_df = st.session_state.suggested_schedule
                 if select_all:
-                    st.session_state.suggested_schedule["checkbox"] = True
+                    schedule_df["checkbox"] = True
+                
+                schedule_list = schedule_df.to_dict('records')
 
-                schedule_list = st.session_state.suggested_schedule.to_dict('records')
                 edited_schedule = st.data_editor(
                     schedule_list,
                     column_order=["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
                     column_config={
                         "checkbox": st.column_config.CheckboxColumn(
                             "Sign up?",
-                            help="Select flights to sign up for",
+                            help="Select flights to sign up for. Pre-assigned flights are selected by default.",
                             default=False
                         ),
                         "Gate": "Gate",
@@ -411,6 +433,8 @@ try:
                     elif not selected_flights_to_sign_up:
                         st.warning("Please select at least one flight to sign up for.")
                     else:
+                        # This function will attempt to sign up for all selected flights.
+                        # It will warn if the user is already signed up, which is expected for pre-assigned flights.
                         sign_up_for_flights(name, selected_flights_to_sign_up)
 
             elif st.session_state.suggested_schedule is not None and st.session_state.suggested_schedule.empty:
