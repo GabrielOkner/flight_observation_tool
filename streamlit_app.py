@@ -241,45 +241,37 @@ try:
             name = st.text_input("Enter your name:", key="suggest_name")
 
             # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
-            # Store formatted time strings directly
-            time_options_formatted_strings = []
+            # Store datetime.time objects directly
+            time_options_time_only = []
             for hour in range(7, 24):
-                time_options_formatted_strings.append(time(hour, 0).strftime("%I:%M %p"))
+                time_options_time_only.append(time(hour, 0))
                 if hour < 23:
-                    time_options_formatted_strings.append(time(hour, 30).strftime("%I:%M %p"))
+                    time_options_time_only.append(time(hour, 30))
 
             # Find indices for default 9:00 AM and 5:00 PM
-            default_start_time_str = time(9, 0).strftime("%I:%M %p")
-            default_end_time_str = time(17, 0).strftime("%I:%M %p")
-
-            start_index = 0
-            if default_start_time_str in time_options_formatted_strings:
-                start_index = time_options_formatted_strings.index(default_start_time_str)
-
-            end_index = len(time_options_formatted_strings) - 1
-            if default_end_time_str in time_options_formatted_strings:
-                end_index = time_options_formatted_strings.index(default_end_time_str)
-
+            default_start_time = time(9, 0)
+            default_end_time = time(17, 0)
+            start_index = time_options_time_only.index(default_start_time) if default_start_time in time_options_time_only else 0
+            end_index = time_options_time_only.index(default_end_time) if default_end_time in time_options_time_only else len(time_options_time_only) - 1
+            
             c1, c2 = st.columns(2)
-            selected_start_time_str = c1.slider(
+            user_start_time = c1.slider(
                 "Enter your start time:",
-                min_value=time_options_formatted_strings[0],
-                max_value=time_options_formatted_strings[-1],
-                value=time_options_formatted_strings[start_index],
+                min_value=time_options_time_only[0],
+                max_value=time_options_time_only[-1],
+                value=time_options_time_only[start_index],
+                format="%I:%M %p", # Use standard format string for time objects
                 key="suggest_start_time_slider"
             )
-            selected_end_time_str = c2.slider(
+            user_end_time = c2.slider(
                 "Enter your end time:",
-                min_value=time_options_formatted_strings[0],
-                max_value=time_options_formatted_strings[-1],
-                value=time_options_formatted_strings[end_index],
+                min_value=time_options_time_only[0],
+                max_value=time_options_time_only[-1],
+                value=time_options_time_only[end_index],
+                format="%I:%M %p", # Use standard format string for time objects
                 key="suggest_end_time_slider"
             )
             
-            # Parse the selected time strings back into datetime.time objects
-            user_start_time = datetime.strptime(selected_start_time_str, "%I:%M %p").time()
-            user_end_time = datetime.strptime(selected_end_time_str, "%I:%M %p").time()
-
             if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
                 if not name.strip():
                     st.warning("Please enter your name.")
@@ -381,12 +373,10 @@ try:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
 
-                # Dropdown for selecting all flights
                 select_all = st.checkbox("Select all flights", key="select_all_checkbox")
                 if select_all:
                     st.session_state.suggested_schedule["checkbox"] = True
                 
-                # Create a list of dictionaries to pass to st.data_editor
                 schedule_list = st.session_state.suggested_schedule.to_dict('records')
                 edited_schedule = st.data_editor(
                     schedule_list,
@@ -403,14 +393,13 @@ try:
                         "Boarding Start": "Board Start",
                         "Boarding End": "Board End",
                         "Time Between": "Time Between",
-                        "Flight_Num_hidden": None # Hide the flight num column
+                        "Flight_Num_hidden": None 
                     },
                     hide_index=True,
                     use_container_width=True,
                     key="editable_schedule"
                 )
 
-                # Get selected flight numbers from the edited schedule
                 selected_flights_to_sign_up = [
                     row['Flight #'] for row in edited_schedule if row['checkbox']
                 ]
