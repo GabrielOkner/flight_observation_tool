@@ -294,27 +294,20 @@ try:
                         all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
                         all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
 
-                        # --- FIX START ---
-                        # Correctly define the pool of available flights for the scheduler
                         name_to_check = name.strip()
                         
-                        # A flight is a candidate if it's unassigned OR already assigned to the current user.
-                        # This excludes flights assigned ONLY to other people.
                         is_unassigned = all_flights_for_scheduling['Observers'].str.strip() == ''
                         is_assigned_to_me = all_flights_for_scheduling['Observers'].str.contains(name_to_check, case=False, na=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
 
-                        # From this candidate pool, identify the ones already assigned to the user.
                         pre_assigned_flights = candidate_flights[
                             candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)
                         ].copy()
 
-                        # The available pool for the algorithm to pick from is what's left.
                         pre_assigned_flight_nums = pre_assigned_flights['FLIGHT OUT'].tolist()
                         available_flights_pool = candidate_flights[
                             ~candidate_flights['FLIGHT OUT'].isin(pre_assigned_flight_nums)
                         ].copy()
-                        # --- FIX END ---
                         
                         schedule = []
                         if not pre_assigned_flights.empty:
@@ -356,9 +349,12 @@ try:
                                         else 15
                                     )
                                 )
+                                # --- FIX START ---
+                                # Prioritize downtime first, then importance, then gate proximity.
                                 potential_next_flights = potential_next_flights.sort_values(
-                                    by=['importance_score', 'downtime', 'gate_score']
+                                    by=['downtime', 'importance_score', 'gate_score']
                                 )
+                                # --- FIX END ---
 
                                 best_choice = potential_next_flights.iloc[0]
                                 user_observer_state['schedule'].append(best_choice.to_dict())
