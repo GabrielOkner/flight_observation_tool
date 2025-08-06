@@ -61,7 +61,8 @@ def get_sheet_data(_gc, sheet_name):
                 return pd.NaT
 
         if sheet_name != 'Scheduler':
-            for col in ['Est. Boarding Start', 'Est. Boarding End', 'SCHED DEP']:
+            # Use 'ETD/ACT' instead of 'SCHED DEP'
+            for col in ['Est. Boarding Start', 'Est. Boarding End', 'ETD/ACT']:
                 if col in df.columns:
                     df[col] = df[col].apply(parse_and_localize_time)
 
@@ -207,7 +208,7 @@ try:
                     "DEP GATE": "Gate",
                     "FLIGHT OUT": "Flight",
                     "ARR": "Dest",
-                    "SCHED DEP": "ETD (Sched Dep)",
+                    "ETD/ACT": "ETD (Sched Dep)", # Use ETD/ACT
                     "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End",
                     "PAX TOTAL": "Pax",
@@ -288,7 +289,6 @@ try:
                         all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
                         all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
 
-                        # --- NEW LOGIC START ---
                         # Find flights user is already signed up for
                         pre_assigned_flights = all_flights_for_scheduling[
                             all_flights_for_scheduling['Observers'].str.contains(name.strip(), case=False, na=False)
@@ -314,7 +314,6 @@ try:
                         available_flights_pool = all_flights_for_scheduling[
                             ~all_flights_for_scheduling['FLIGHT OUT'].isin(pre_assigned_flight_nums)
                         ].copy()
-                        # --- NEW LOGIC END ---
 
                         assignments_made_in_round = True
                         while assignments_made_in_round and not available_flights_pool.empty:
@@ -391,8 +390,6 @@ try:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
 
-                # The 'select all' checkbox logic might need adjustment if users can't un-select pre-assigned flights.
-                # For now, we leave it as is, but it's a point for future consideration.
                 select_all = st.checkbox("Select all flights", key="select_all_checkbox")
                 
                 schedule_df = st.session_state.suggested_schedule
@@ -433,8 +430,6 @@ try:
                     elif not selected_flights_to_sign_up:
                         st.warning("Please select at least one flight to sign up for.")
                     else:
-                        # This function will attempt to sign up for all selected flights.
-                        # It will warn if the user is already signed up, which is expected for pre-assigned flights.
                         sign_up_for_flights(name, selected_flights_to_sign_up)
 
             elif st.session_state.suggested_schedule is not None and st.session_state.suggested_schedule.empty:
@@ -469,8 +464,9 @@ try:
                 live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
 
                 for j, row in df.iterrows():
-                    sched_dep_str = row['SCHED DEP'].strftime('%-I:%M %p') if pd.notna(row['SCHED DEP']) else "N/A"
-                    flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {sched_dep_str} → {row['ARR']} | Observers: {row['Observers']}"
+                    # Use ETD/ACT for display
+                    etd_str = row['ETD/ACT'].strftime('%-I:%M %p') if pd.notna(row['ETD/ACT']) else "N/A"
+                    flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {etd_str} → {row['ARR']} | Observers: {row['Observers']}"
                     flight_num_to_update = str(row['FLIGHT OUT'])
 
                     if st.button(flight_label, key=f"manual_{actual_sheet_name}_{flight_num_to_update}_{j}"):
