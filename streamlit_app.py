@@ -312,10 +312,13 @@ try:
                             'lastFlight': schedule[-1] if schedule else None
                         }
                         
-                        pre_assigned_flight_nums = [f['FLIGHT OUT'] for f in schedule]
+                        # --- FIX START ---
+                        # Exclude all flights that have ANY observer assigned, not just the current user
                         available_flights_pool = all_flights_for_scheduling[
-                            ~all_flights_for_scheduling['FLIGHT OUT'].isin(pre_assigned_flight_nums)
+                            all_flights_for_scheduling['Observers'].str.strip() == ''
                         ].copy()
+                        # --- FIX END ---
+
 
                         assignments_made_in_round = True
                         while assignments_made_in_round and not available_flights_pool.empty:
@@ -367,7 +370,8 @@ try:
                                     mins = diff_mins % 60
                                     time_between = f"{hours:01d}:{mins:02d}"
                                 
-                                is_preassigned = flight['FLIGHT OUT'] in pre_assigned_flight_nums
+                                is_preassigned = not pre_assigned_flights.empty and flight['FLIGHT OUT'] in pre_assigned_flights['FLIGHT OUT'].values
+
 
                                 final_output_data.append([
                                     is_preassigned,
