@@ -203,10 +203,7 @@ try:
             valid_times_df = df.dropna(subset=['Est. Boarding Start'])
 
             if actual_sheet_name == current_day_sheet_name:
-                # --- FIX START ---
-                # Use pandas Timestamp for reliable comparison
                 now_datetime = pd.Timestamp.now(tz=CENTRAL_TZ)
-                # --- FIX END ---
                 display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
             else:
                 display_df = valid_times_df.copy()
@@ -307,8 +304,6 @@ try:
                             schedule = pre_assigned_flights.to_dict('records')
                             st.info(f"Found {len(schedule)} pre-assigned flight(s) for {name.strip()}. Incorporating them into the schedule.")
 
-                        # --- FIX START ---
-                        # Use pandas Timestamp for reliable comparison
                         user_observer_state = {
                             'name': name.strip(),
                             'startTime': pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=CENTRAL_TZ),
@@ -316,7 +311,6 @@ try:
                             'schedule': schedule,
                             'lastFlight': schedule[-1] if schedule else None
                         }
-                        # --- FIX END ---
                         
                         pre_assigned_flight_nums = [f['FLIGHT OUT'] for f in schedule]
                         available_flights_pool = all_flights_for_scheduling[
@@ -507,7 +501,11 @@ try:
         GOAL_PER_CATEGORY = 10
         summary_data = []
 
-        relevant_sheet_names = [s.title for s in all_sheets]
+        # --- FIX START ---
+        # Define the days of the week to process, ignoring other sheets like 'Scheduler'
+        days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        relevant_sheet_names = [s.title for s in all_sheets if s.title in days_of_week]
+        # --- FIX END ---
 
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
