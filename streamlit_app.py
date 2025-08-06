@@ -79,7 +79,7 @@ def get_sheet_data(_gc, sheet_name):
                     df[col] = pd.to_datetime(df[col], errors='coerce')
 
 
-        cols_to_str = ['FLIGHT OUT', 'Observers', 'Fleet Type Grouped']
+        cols_to_str = ['FLIGHT OUT', 'Observers', 'Fleet Type Grouped', 'DEP GATE', 'Region']
         if sheet_name != 'Scheduler' and 'MANDATORY OBSERVER' in df.columns:
             cols_to_str.append('MANDATORY OBSERVER')
 
@@ -499,35 +499,82 @@ try:
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
         
-        # Use a dictionary to store counts for each observer
-        observer_counts = {}
+        observer_data = {}
 
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         relevant_sheet_names = [s.title for s in all_sheets if s.title in days_of_week]
 
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
-            # Check if the sheet has the 'Observers' column
-            if df_sheet is not None and not df_sheet.empty and "Observers" in df_sheet.columns:
-                # Drop rows where 'Observers' is empty or NaN to avoid errors
-                df_sheet.dropna(subset=["Observers"], inplace=True)
-                for observers_str in df_sheet["Observers"]:
-                    # Ensure it's a string before splitting
-                    observers_list = str(observers_str).split(',')
-                    for name in observers_list:
-                        # Clean up the name and increment the count
-                        clean_name = name.strip()
-                        if clean_name: # Make sure not to count empty strings
-                            observer_counts[clean_name] = observer_counts.get(clean_name, 0) + 1
-
-        if observer_counts:
-            # Convert the dictionary to a DataFrame for display
-            df_observer_summary = pd.DataFrame(list(observer_counts.items()), columns=['Observer', 'Total Observations'])
-            # Sort by the number of observations in descending order
-            df_observer_summary = df_observer_summary.sort_values(by='Total Observations', ascending=False).reset_index(drop=True)
             
-            st.markdown("### Observations per Observer")
-            st.dataframe(df_observer_summary, use_container_width=True)
+            required_cols = ["Observers", "Fleet Type Grouped", "DEP GATE", "Region"]
+            if df_sheet is not None and not df_sheet.empty and all(col in df_sheet.columns for col in required_cols):
+                df_sheet.dropna(subset=["Observers"], inplace=True)
+                
+                for _, row in df_sheet.iterrows():
+                    observers_str = str(row["Observers"])
+                    fleet_type = str(row["Fleet Type Grouped"]).strip()
+                    concourse = str(row["DEP GATE"]).strip()[0] if str(row["DEP GATE"]).strip() else "N/A"
+                    region = str(row["Region"]).strip()
+                    
+                    observers_list = [name.strip() for name in observers_str.split(',') if name.strip()]
+
+                    for name in observers_list:
+                        if name not in observer_data:
+                            observer_data[name] = {
+                                "Total Observations": 0,
+                                "Fleet Types": {},
+                                "Concourses": {},
+                                "Regions": {}
+                            }
+                        
+                        observer_data[name]["Total Observations"] += 1
+                        observer_data[name]["Fleet Types"][fleet_type] = observer_data[name]["Fleet Types"].get(fleet_type, 0) + 1
+                        observer_data[name]["Concourses"][concourse] = observer_data[name]["Concourses"].get(concourse, 0) + 1
+                        observer_data[name]["Regions"][region] = observer_data[name]["Regions"].get(region, 0) + 1
+
+        if observer_data:
+            summary_list = []
+            for name, data in observer_data.items():
+                summary_list.append({"Observer": name, "Total Observations": data["Total Observations"]})
+            
+            df_summary = pd.DataFrame(summary_list).sort_values(by="Total Observations", ascending=False).reset_index(drop=True)
+
+            st.markdown("### Total Observations per Observer")
+            st.dataframe(df_summary, use_container_width=True)
+
+            st.markdown("---")
+            st.markdown("### Detailed Breakdown per Observer")
+
+            sorted_observers = sorted(observer_data.items(), key=lambda item: item[1]["Total Observations"], reverse=True)
+
+            for name, data in sorted_observers:
+                with st.expander(f"{name} (Total: {data['Total Observations']})"):
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.markdown("#### By Fleet Type")
+                        if data["Fleet Types"]:
+                            df_fleet = pd.DataFrame(list(data["Fleet Types"].items()), columns=["Fleet Type", "Count"])
+                            st.dataframe(df_fleet, hide_index=True, use_container_width=True)
+                        else:
+                            st.write("No data.")
+
+                    with col2:
+                        st.markdown("#### By Concourse")
+                        if data["Concourses"]:
+                            df_concourse = pd.DataFrame(list(data["Concourses"].items()), columns=["Concourse", "Count"])
+                            st.dataframe(df_concourse, hide_index=True, use_container_width=True)
+                        else:
+                            st.write("No data.")
+
+                    with col3:
+                        st.markdown("#### By Region")
+                        if data["Regions"]:
+                            df_region = pd.DataFrame(list(data["Regions"].items()), columns=["Region", "Count"])
+                            st.dataframe(df_region, hide_index=True, use_container_width=True)
+                        else:
+                            st.write("No data.")
         else:
             st.info("No tracking data available yet.")
 
