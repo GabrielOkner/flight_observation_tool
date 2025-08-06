@@ -252,8 +252,22 @@ try:
             end_index = time_options_time_only.index(default_end_time) if default_end_time in time_options_time_only else len(time_options_time_only) - 1
             
             c1, c2 = st.columns(2)
-            user_start_time = c1.slider("Enter your start time:", min_value=time_options_time_only[0], max_value=time_options_time_only[-1], value=time_options_time_only[start_index], key="suggest_start_time_slider", format="%I:%M %p")
-            user_end_time = c2.slider("Enter your end time:", min_value=time_options_time_only[0], max_value=time_options_time_only[-1], value=time_options_time_only[end_index], key="suggest_end_time_slider", format="%I:%M %p")
+            user_start_time = c1.slider(
+                "Enter your start time:",
+                min_value=time_options_time_only[0],
+                max_value=time_options_time_only[-1],
+                value=time_options_time_only[start_index],
+                format="%I:%M %p", # Corrected format string for time display
+                key="suggest_start_time_slider"
+            )
+            user_end_time = c2.slider(
+                "Enter your end time:",
+                min_value=time_options_time_only[0],
+                max_value=time_options_time_only[-1],
+                value=time_options_time_only[end_index],
+                format="%I:%M %p", # Corrected format string for time display
+                key="suggest_end_time_slider"
+            )
             
             if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
                 if not name.strip():
@@ -287,6 +301,7 @@ try:
                         assignments_made_in_round = True
                         while assignments_made_in_round and not available_flights_pool.empty:
                             assignments_made_in_round = False
+
                             potential_next_flights = pd.DataFrame()
                             current_observer_end_time = user_observer_state['endTime']
                             last_flight_busy_end = user_observer_state['lastFlight']['busyEnd'] if user_observer_state['lastFlight'] else user_observer_state['startTime']
