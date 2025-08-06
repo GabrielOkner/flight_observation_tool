@@ -500,6 +500,9 @@ try:
         st.subheader("Observer Sign-Up Tracker")
         
         observer_data = {}
+        fleet_type_counts = {}
+        concourse_counts = {}
+        region_counts = {}
 
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         relevant_sheet_names = [s.title for s in all_sheets if s.title in days_of_week]
@@ -518,6 +521,12 @@ try:
                     region = str(row["Region"]).strip()
                     
                     observers_list = [name.strip() for name in observers_str.split(',') if name.strip()]
+                    
+                    num_observers_on_flight = len(observers_list)
+                    if num_observers_on_flight > 0:
+                        if fleet_type: fleet_type_counts[fleet_type] = fleet_type_counts.get(fleet_type, 0) + num_observers_on_flight
+                        if concourse != "N/A": concourse_counts[concourse] = concourse_counts.get(concourse, 0) + num_observers_on_flight
+                        if region: region_counts[region] = region_counts.get(region, 0) + num_observers_on_flight
 
                     for name in observers_list:
                         if name not in observer_data:
@@ -529,11 +538,28 @@ try:
                             }
                         
                         observer_data[name]["Total Observations"] += 1
-                        observer_data[name]["Fleet Types"][fleet_type] = observer_data[name]["Fleet Types"].get(fleet_type, 0) + 1
-                        observer_data[name]["Concourses"][concourse] = observer_data[name]["Concourses"].get(concourse, 0) + 1
-                        observer_data[name]["Regions"][region] = observer_data[name]["Regions"].get(region, 0) + 1
+                        if fleet_type: observer_data[name]["Fleet Types"][fleet_type] = observer_data[name]["Fleet Types"].get(fleet_type, 0) + 1
+                        if concourse != "N/A": observer_data[name]["Concourses"][concourse] = observer_data[name]["Concourses"].get(concourse, 0) + 1
+                        if region: observer_data[name]["Regions"][region] = observer_data[name]["Regions"].get(region, 0) + 1
 
         if observer_data:
+            st.markdown("### Overall Observation Counts")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown("#### By Fleet Type")
+                df_fleet_total = pd.DataFrame(list(fleet_type_counts.items()), columns=["Fleet Type", "Total Count"]).sort_values(by="Total Count", ascending=False)
+                st.dataframe(df_fleet_total, hide_index=True, use_container_width=True)
+            with col2:
+                st.markdown("#### By Concourse")
+                df_concourse_total = pd.DataFrame(list(concourse_counts.items()), columns=["Concourse", "Total Count"]).sort_values(by="Total Count", ascending=False)
+                st.dataframe(df_concourse_total, hide_index=True, use_container_width=True)
+            with col3:
+                st.markdown("#### By Region")
+                df_region_total = pd.DataFrame(list(region_counts.items()), columns=["Region", "Total Count"]).sort_values(by="Total Count", ascending=False)
+                st.dataframe(df_region_total, hide_index=True, use_container_width=True)
+
+            st.markdown("---")
+            
             summary_list = []
             for name, data in observer_data.items():
                 summary_list.append({"Observer": name, "Total Observations": data["Total Observations"]})
@@ -550,9 +576,9 @@ try:
 
             for name, data in sorted_observers:
                 with st.expander(f"{name} (Total: {data['Total Observations']})"):
-                    col1, col2, col3 = st.columns(3)
+                    col1_detail, col2_detail, col3_detail = st.columns(3)
 
-                    with col1:
+                    with col1_detail:
                         st.markdown("#### By Fleet Type")
                         if data["Fleet Types"]:
                             df_fleet = pd.DataFrame(list(data["Fleet Types"].items()), columns=["Fleet Type", "Count"])
@@ -560,7 +586,7 @@ try:
                         else:
                             st.write("No data.")
 
-                    with col2:
+                    with col2_detail:
                         st.markdown("#### By Concourse")
                         if data["Concourses"]:
                             df_concourse = pd.DataFrame(list(data["Concourses"].items()), columns=["Concourse", "Count"])
@@ -568,7 +594,7 @@ try:
                         else:
                             st.write("No data.")
 
-                    with col3:
+                    with col3_detail:
                         st.markdown("#### By Region")
                         if data["Regions"]:
                             df_region = pd.DataFrame(list(data["Regions"].items()), columns=["Region", "Count"])
