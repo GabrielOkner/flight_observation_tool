@@ -31,17 +31,17 @@ def get_sheet_data(_gc, sheet_name):
     """
     Fetch and process data for a given sheet name.
     """
-    data = [] 
+    data = []
     try:
         master_sheet = _gc.open_by_url(SHEET_URL)
         sheet = master_sheet.worksheet(sheet_name)
         data = sheet.get_all_records()
-        
+
         if not data:
             if sheet_name != 'Scheduler':
                 st.warning(f"Sheet '{sheet_name}' is empty.")
             return pd.DataFrame()
-        
+
         df = pd.DataFrame(data)
         df.columns = df.columns.str.strip()
 
@@ -49,8 +49,10 @@ def get_sheet_data(_gc, sheet_name):
             if not time_str or pd.isna(time_str):
                 return pd.NaT
             try:
+                # Attempt to parse the time string, coercing errors to NaT (Not a Time)
                 time_obj = pd.to_datetime(str(time_str), errors='coerce').time()
                 if pd.notna(time_obj):
+                    # Combine with today's date and localize to Central Time
                     today_date_for_combine = datetime.now(CENTRAL_TZ).date()
                     naive_datetime = datetime.combine(today_date_for_combine, time_obj)
                     return CENTRAL_TZ.localize(naive_datetime)
@@ -62,7 +64,7 @@ def get_sheet_data(_gc, sheet_name):
             for col in ['Est. Boarding Start', 'Est. Boarding End', 'SCHED DEP']:
                 if col in df.columns:
                     df[col] = df[col].apply(parse_and_localize_time)
-            
+
             if 'Est. Boarding Start' in df.columns and 'Est. Boarding End' in df.columns:
                 df['busyStart'] = df['Est. Boarding Start'] - timedelta(minutes=10)
                 df['busyEnd'] = df['Est. Boarding End'] + timedelta(minutes=10)
@@ -76,8 +78,8 @@ def get_sheet_data(_gc, sheet_name):
             cols_to_str.append('MANDATORY OBSERVER')
 
         for col in cols_to_str:
-             if col in df.columns:
-                 df[col] = df[col].astype(str)
+            if col in df.columns:
+                df[col] = df[col].astype(str)
 
         return df
     except gspread.exceptions.WorksheetNotFound:
@@ -91,7 +93,7 @@ def parse_gate(gate):
     """Parses a gate string into its concourse and number components."""
     if not isinstance(gate, str) or len(gate) == 0:
         return {'concourse': None, 'number': float('inf')}
-    
+
     concourse = gate.strip().upper()[0] if gate.strip() else None
     number_match = ''.join(filter(str.isdigit, gate))
     number = int(number_match) if number_match else float('inf')
@@ -105,14 +107,14 @@ def sign_up_for_flights(name, flights_to_sign_up):
     master_sheet = gc.open_by_url(SHEET_URL)
     sheet_to_update = master_sheet.worksheet(datetime.now(CENTRAL_TZ).strftime("%A"))
     df = get_sheet_data(gc, datetime.now(CENTRAL_TZ).strftime("%A"))
-    
+
     if df is None or df.empty:
         st.error("Could not retrieve flight data to update. Please try again.")
         return False
-        
+
     all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("FLIGHT OUT") + 1)
     observer_col_index = df.columns.get_loc("Observers") + 1
-    
+
     cells_to_update = []
     success_count = 0
     for flight_num in flights_to_sign_up:
@@ -130,14 +132,14 @@ def sign_up_for_flights(name, flights_to_sign_up):
                 st.warning(f"{name.strip()} is already signed up for flight {flight_num}.")
         except ValueError:
             st.warning(f"Could not find flight {flight_num} to update.")
-    
+
     if cells_to_update:
         sheet_to_update.update_cells(cells_to_update)
         st.success(f"{name.strip()}, you have been signed up for {success_count} flights!")
         st.cache_data.clear()
         st.rerun()
         return True
-    
+
     return False
 
 # --- Main App Logic ---
@@ -146,15 +148,15 @@ try:
     master_sheet = gc.open_by_url(SHEET_URL)
     all_sheets = master_sheet.worksheets()
     sheet_map = {sheet.title: sheet for sheet in all_sheets}
-    
+
     available_days_for_selection = ["Monday", "Tuesday", "Wednesday"]
-    
+
     if "mode" not in st.session_state:
         st.session_state.mode = "today"
     if "suggested_schedule" not in st.session_state:
         st.session_state.suggested_schedule = None
 
-    col1, col2, col3, col4 = st.columns(4) 
+    col1, col2, col3, col4 = st.columns(4)
     if col1.button("Today's Flights", use_container_width=True):
         st.session_state.mode = "today"
     if col2.button("Suggest My Schedule", use_container_width=True):
@@ -188,40 +190,41 @@ try:
             key="day_selector_today_mode"
         )
         actual_sheet_name = current_day_sheet_name if selected_display_name == "Today" else selected_display_name
-        
-        st.subheader(f"Flights for {selected_display_name}") 
+
+        st.subheader(f"Flights for {selected_display_name}")
         df = get_sheet_data(gc, actual_sheet_name)
         if df is not None and not df.empty:
             valid_times_df = df.dropna(subset=['Est. Boarding Start'])
-            
+
             if actual_sheet_name == current_day_sheet_name:
                 now_datetime = datetime.now(CENTRAL_TZ)
                 display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
             else:
                 display_df = valid_times_df.copy()
-                 
+
             if not display_df.empty:
                 cols_to_display = {
-                    "DEP GATE": "Gate", 
-                    "FLIGHT OUT": "Flight", 
+                    "DEP GATE": "Gate",
+                    "FLIGHT OUT": "Flight",
                     "ARR": "Dest",
-                    "SCHED DEP": "ETD (Sched Dep)", 
-                    "Est. Boarding Start": "Board Start", 
+                    "SCHED DEP": "ETD (Sched Dep)",
+                    "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End",
-                    "PAX TOTAL": "Pax", 
-                    "Important flight?": "Important", 
+                    "PAX TOTAL": "Pax",
+                    "Important flight?": "Important",
                     "Observers": "Observers"
                 }
-                
+
                 actual_cols_to_display = {k: v for k, v in cols_to_display.items() if k in display_df.columns}
-                
+
                 final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
-                
+
+                # Format time columns for display
                 if 'Board Start' in final_display_df.columns:
                     final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
                 if 'Board End' in final_display_df.columns:
                     final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
-                if 'ETD (Sched Dep)' in final_display_df.columns: 
+                if 'ETD (Sched Dep)' in final_display_df.columns:
                     final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
 
                 st.dataframe(final_display_df, hide_index=True, use_container_width=True)
@@ -240,38 +243,36 @@ try:
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="suggest_name")
 
+            # --- FIX START ---
             # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
-            # Store datetime.time objects directly
-            time_options_time_only = []
+            # Using st.select_slider is more robust for discrete options and fixes the format display issue.
+            time_options = []
             for hour in range(7, 24):
-                time_options_time_only.append(time(hour, 0))
-                if hour < 23:
-                    time_options_time_only.append(time(hour, 30))
+                time_options.append(time(hour, 0))
+                if hour < 23:  # Add 30-min interval for all hours except 11 PM
+                    time_options.append(time(hour, 30))
 
-            # Find indices for default 9:00 AM and 5:00 PM
+            # Define default start and end times
             default_start_time = time(9, 0)
             default_end_time = time(17, 0)
-            start_index = time_options_time_only.index(default_start_time) if default_start_time in time_options_time_only else 0
-            end_index = time_options_time_only.index(default_end_time) if default_end_time in time_options_time_only else len(time_options_time_only) - 1
-            
+
             c1, c2 = st.columns(2)
-            user_start_time = c1.slider(
+            user_start_time = c1.select_slider(
                 "Enter your start time:",
-                min_value=time_options_time_only[0],
-                max_value=time_options_time_only[-1],
-                value=time_options_time_only[start_index],
-                format="%I:%M %p", # Use standard format string for time objects
+                options=time_options,
+                value=default_start_time,
+                format_func=lambda t: t.strftime('%-I:%M %p'), # Correctly formats the time for display
                 key="suggest_start_time_slider"
             )
-            user_end_time = c2.slider(
+            user_end_time = c2.select_slider(
                 "Enter your end time:",
-                min_value=time_options_time_only[0],
-                max_value=time_options_time_only[-1],
-                value=time_options_time_only[end_index],
-                format="%I:%M %p", # Use standard format string for time objects
+                options=time_options,
+                value=default_end_time,
+                format_func=lambda t: t.strftime('%-I:%M %p'), # Correctly formats the time for display
                 key="suggest_end_time_slider"
             )
-            
+            # --- FIX END ---
+
             if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
                 if not name.strip():
                     st.warning("Please enter your name.")
@@ -336,12 +337,12 @@ try:
                                 user_observer_state['lastFlight'] = best_choice.to_dict()
                                 available_flights_pool = available_flights_pool[available_flights_pool['FLIGHT OUT'] != best_choice['FLIGHT OUT']]
                                 assignments_made_in_round = True
-                        
+
                         if user_observer_state['schedule']:
                             user_observer_state['schedule'].sort(key=lambda f: f['Est. Boarding Start'])
                             final_output_data = []
                             headers = ["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between", "Flight_Num_hidden"]
-                            
+
                             previous_flight_end = None
                             for flight in user_observer_state['schedule']:
                                 time_between = "---"
@@ -362,9 +363,9 @@ try:
                                     flight['FLIGHT OUT'] # Hidden flight num for sign up
                                 ])
                                 previous_flight_end = flight['Est. Boarding End']
-                            
+
                             st.session_state.suggested_schedule = pd.DataFrame(final_output_data, columns=headers)
-                            st.success(f"Here is your suggested schedule:") 
+                            st.success(f"Here is your suggested schedule:")
                         else:
                             st.session_state.suggested_schedule = pd.DataFrame()
                             st.info("No available flights match your criteria for a suggested schedule.")
@@ -376,7 +377,7 @@ try:
                 select_all = st.checkbox("Select all flights", key="select_all_checkbox")
                 if select_all:
                     st.session_state.suggested_schedule["checkbox"] = True
-                
+
                 schedule_list = st.session_state.suggested_schedule.to_dict('records')
                 edited_schedule = st.data_editor(
                     schedule_list,
@@ -393,7 +394,7 @@ try:
                         "Boarding Start": "Board Start",
                         "Boarding End": "Board End",
                         "Time Between": "Time Between",
-                        "Flight_Num_hidden": None 
+                        "Flight_Num_hidden": None
                     },
                     hide_index=True,
                     use_container_width=True,
@@ -411,7 +412,7 @@ try:
                         st.warning("Please select at least one flight to sign up for.")
                     else:
                         sign_up_for_flights(name, selected_flights_to_sign_up)
-            
+
             elif st.session_state.suggested_schedule is not None and st.session_state.suggested_schedule.empty:
                 st.info("No available flights match your criteria for a suggested schedule.")
 
@@ -420,7 +421,7 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "signup":
         st.subheader("Manual Flight Sign-up")
-        
+
         display_options = []
         default_index = 0
         for i, day in enumerate(available_days_for_selection):
@@ -432,7 +433,7 @@ try:
 
         selected_display_name = st.selectbox("Select a Day:", options=display_options, index=default_index, key="day_selector_signup_mode")
         actual_sheet_name = current_day_sheet_name if selected_display_name == "Today" else selected_display_name
-        st.subheader(f"Sign-up for {selected_display_name} Flights") 
+        st.subheader(f"Sign-up for {selected_display_name} Flights")
         name = st.text_input("Enter your name:", key="manual_name")
 
         if name.strip():
@@ -479,9 +480,9 @@ try:
         st.subheader("Observer Sign-Up Tracker")
         GOAL_PER_CATEGORY = 10
         summary_data = []
-        
-        relevant_sheet_names = [s.title for s in all_sheets] 
-        
+
+        relevant_sheet_names = [s.title for s in all_sheets]
+
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
             if df_sheet is not None and not df_sheet.empty and "Observers" in df_sheet.columns and "Fleet Type Grouped" in df_sheet.columns:
@@ -492,11 +493,11 @@ try:
                     category = str(row["Fleet Type Grouped"]).strip().lower()
                     if category in {"widebody", "narrowbody", "express"}:
                         summary_data.append({"Day": sheet_name, "Category": category, "Signups": num_signups})
-        
+
         if summary_data:
             df_summary = pd.DataFrame(summary_data)
             chart_data = df_summary.pivot_table(index="Day", columns="Category", values="Signups", aggfunc="sum", fill_value=0)
-            
+
             st.markdown("### Signups by Day and Category")
             st.dataframe(chart_data, use_container_width=True)
 
@@ -508,7 +509,7 @@ try:
                 st.progress(progress, text=f"{category.capitalize()}: {int(count)} / {GOAL_PER_CATEGORY}")
         else:
             st.info("No tracking data available yet.")
-            
+
 except Exception as e:
     st.error(f"A critical error occurred: {e}")
     st.info("Please check your Google Sheet permissions and ensure the sheet format is correct.")
