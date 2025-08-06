@@ -300,9 +300,18 @@ try:
                         is_assigned_to_me = all_flights_for_scheduling['Observers'].str.contains(name_to_check, case=False, na=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
 
+                        # --- FIX START ---
+                        # Convert user start/end times to pandas Timestamps for comparison
+                        user_start_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=CENTRAL_TZ)
+                        user_end_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=CENTRAL_TZ)
+
+                        # Filter pre-assigned flights by the selected time window
                         pre_assigned_flights = candidate_flights[
-                            candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)
+                            (candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)) &
+                            (candidate_flights['Est. Boarding Start'] >= user_start_timestamp) &
+                            (candidate_flights['Est. Boarding End'] <= user_end_timestamp)
                         ].copy()
+                        # --- FIX END ---
 
                         pre_assigned_flight_nums = pre_assigned_flights['FLIGHT OUT'].tolist()
                         available_flights_pool = candidate_flights[
@@ -317,8 +326,8 @@ try:
 
                         user_observer_state = {
                             'name': name.strip(),
-                            'startTime': pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=CENTRAL_TZ),
-                            'endTime': pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=CENTRAL_TZ),
+                            'startTime': user_start_timestamp,
+                            'endTime': user_end_timestamp,
                             'schedule': schedule,
                             'lastFlight': schedule[-1] if schedule else None
                         }
@@ -349,12 +358,9 @@ try:
                                         else 15
                                     )
                                 )
-                                # --- FIX START ---
-                                # Prioritize downtime first, then importance, then gate proximity.
                                 potential_next_flights = potential_next_flights.sort_values(
                                     by=['downtime', 'importance_score', 'gate_score']
                                 )
-                                # --- FIX END ---
 
                                 best_choice = potential_next_flights.iloc[0]
                                 user_observer_state['schedule'].append(best_choice.to_dict())
