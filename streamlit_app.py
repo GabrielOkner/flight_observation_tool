@@ -241,41 +241,45 @@ try:
             name = st.text_input("Enter your name:", key="suggest_name")
 
             # Generate time options for the sliders (7 AM to 11 PM, 30-min intervals)
-            # Store time objects directly
-            time_options_time_only = []
+            # Store formatted time strings directly
+            time_options_formatted_strings = []
             for hour in range(7, 24):
-                time_options_time_only.append(time(hour, 0))
+                time_options_formatted_strings.append(time(hour, 0).strftime("%I:%M %p"))
                 if hour < 23:
-                    time_options_time_only.append(time(hour, 30))
-
-            # Custom formatter function for st.slider
-            def format_slider_time(time_obj):
-                return time_obj.strftime("%I:%M %p")
+                    time_options_formatted_strings.append(time(hour, 30).strftime("%I:%M %p"))
 
             # Find indices for default 9:00 AM and 5:00 PM
-            default_start_time = time(9, 0)
-            default_end_time = time(17, 0)
-            start_index = time_options_time_only.index(default_start_time) if default_start_time in time_options_time_only else 0
-            end_index = time_options_time_only.index(default_end_time) if default_end_time in time_options_time_only else len(time_options_time_only) - 1
-            
+            default_start_time_str = time(9, 0).strftime("%I:%M %p")
+            default_end_time_str = time(17, 0).strftime("%I:%M %p")
+
+            start_index = 0
+            if default_start_time_str in time_options_formatted_strings:
+                start_index = time_options_formatted_strings.index(default_start_time_str)
+
+            end_index = len(time_options_formatted_strings) - 1
+            if default_end_time_str in time_options_formatted_strings:
+                end_index = time_options_formatted_strings.index(default_end_time_str)
+
             c1, c2 = st.columns(2)
-            user_start_time = c1.slider(
+            selected_start_time_str = c1.slider(
                 "Enter your start time:",
-                min_value=time_options_time_only[0],
-                max_value=time_options_time_only[-1],
-                value=time_options_time_only[start_index],
-                format_func=format_slider_time, # Use format_func
+                min_value=time_options_formatted_strings[0],
+                max_value=time_options_formatted_strings[-1],
+                value=time_options_formatted_strings[start_index],
                 key="suggest_start_time_slider"
             )
-            user_end_time = c2.slider(
+            selected_end_time_str = c2.slider(
                 "Enter your end time:",
-                min_value=time_options_time_only[0],
-                max_value=time_options_time_only[-1],
-                value=time_options_time_only[end_index],
-                format_func=format_slider_time, # Use format_func
+                min_value=time_options_formatted_strings[0],
+                max_value=time_options_formatted_strings[-1],
+                value=time_options_formatted_strings[end_index],
                 key="suggest_end_time_slider"
             )
             
+            # Parse the selected time strings back into datetime.time objects
+            user_start_time = datetime.strptime(selected_start_time_str, "%I:%M %p").time()
+            user_end_time = datetime.strptime(selected_end_time_str, "%I:%M %p").time()
+
             if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
                 if not name.strip():
                     st.warning("Please enter your name.")
