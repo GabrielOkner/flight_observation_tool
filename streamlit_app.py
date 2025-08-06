@@ -65,6 +65,9 @@ def get_sheet_data(_gc, sheet_name):
             for col in ['Est. Boarding Start', 'Est. Boarding End', 'ETD/ACT']:
                 if col in df.columns:
                     df[col] = df[col].apply(parse_and_localize_time)
+                    # This ensures the column has a proper pandas datetime type
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+
 
             if 'Est. Boarding Start' in df.columns and 'Est. Boarding End' in df.columns:
                 df['busyStart'] = df['Est. Boarding Start'] - timedelta(minutes=10)
@@ -73,6 +76,8 @@ def get_sheet_data(_gc, sheet_name):
             for col in ['Start Time', 'End Time']:
                 if col in df.columns:
                     df[col] = df[col].apply(parse_and_localize_time)
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+
 
         cols_to_str = ['FLIGHT OUT', 'Observers', 'Fleet Type Grouped']
         if sheet_name != 'Scheduler' and 'MANDATORY OBSERVER' in df.columns:
@@ -198,7 +203,10 @@ try:
             valid_times_df = df.dropna(subset=['Est. Boarding Start'])
 
             if actual_sheet_name == current_day_sheet_name:
-                now_datetime = datetime.now(CENTRAL_TZ)
+                # --- FIX START ---
+                # Use pandas Timestamp for reliable comparison
+                now_datetime = pd.Timestamp.now(tz=CENTRAL_TZ)
+                # --- FIX END ---
                 display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
             else:
                 display_df = valid_times_df.copy()
@@ -289,27 +297,27 @@ try:
                         all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
                         all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
 
-                        # Find flights user is already signed up for
                         pre_assigned_flights = all_flights_for_scheduling[
                             all_flights_for_scheduling['Observers'].str.contains(name.strip(), case=False, na=False)
                         ].copy()
                         
-                        # Initialize schedule with pre-assigned flights
                         schedule = []
                         if not pre_assigned_flights.empty:
                             pre_assigned_flights = pre_assigned_flights.sort_values(by='Est. Boarding Start')
                             schedule = pre_assigned_flights.to_dict('records')
                             st.info(f"Found {len(schedule)} pre-assigned flight(s) for {name.strip()}. Incorporating them into the schedule.")
 
+                        # --- FIX START ---
+                        # Use pandas Timestamp for reliable comparison
                         user_observer_state = {
                             'name': name.strip(),
-                            'startTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_start_time)),
-                            'endTime': CENTRAL_TZ.localize(datetime.combine(today_date.date(), user_end_time)),
+                            'startTime': pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=CENTRAL_TZ),
+                            'endTime': pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=CENTRAL_TZ),
                             'schedule': schedule,
                             'lastFlight': schedule[-1] if schedule else None
                         }
+                        # --- FIX END ---
                         
-                        # Exclude pre-assigned flights from the pool of available flights
                         pre_assigned_flight_nums = [f['FLIGHT OUT'] for f in schedule]
                         available_flights_pool = all_flights_for_scheduling[
                             ~all_flights_for_scheduling['FLIGHT OUT'].isin(pre_assigned_flight_nums)
@@ -365,18 +373,17 @@ try:
                                     mins = diff_mins % 60
                                     time_between = f"{hours:01d}:{mins:02d}"
                                 
-                                # Pre-assigned flights should be checked by default
                                 is_preassigned = flight['FLIGHT OUT'] in pre_assigned_flight_nums
 
                                 final_output_data.append([
-                                    is_preassigned, # Checkbox state
+                                    is_preassigned,
                                     flight['DEP GATE'],
                                     flight['FLIGHT OUT'],
                                     flight['ARR'],
                                     flight['Est. Boarding Start'].strftime('%-I:%M %p'),
                                     flight['Est. Boarding End'].strftime('%-I:%M %p'),
                                     time_between,
-                                    flight['FLIGHT OUT'] # Hidden flight num for sign up
+                                    flight['FLIGHT OUT']
                                 ])
                                 previous_flight_end = flight['Est. Boarding End']
 
@@ -464,7 +471,6 @@ try:
                 live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
 
                 for j, row in df.iterrows():
-                    # Use ETD/ACT for display
                     etd_str = row['ETD/ACT'].strftime('%-I:%M %p') if pd.notna(row['ETD/ACT']) else "N/A"
                     flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {etd_str} → {row['ARR']} | Observers: {row['Observers']}"
                     flight_num_to_update = str(row['FLIGHT OUT'])
