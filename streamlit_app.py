@@ -6,7 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 
 st.set_page_config(page_title="Flight Observer", layout="centered")
-st.title("IAH Flight Observation")
+st.title("LAX Flight Observation")
 
 # Authorize Google Sheets
 scope = [
@@ -21,7 +21,7 @@ gc = gspread.authorize(credentials)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 master_sheet = gc.open_by_url(SHEET_URL)
 all_sheets = master_sheet.worksheets()
-sheet_map = {sheet.title: sheet for sheet in all_sheets} #maps sheet name to sheet object
+sheet_map = {sheet.title: sheet for sheet in all_sheets}
 
 # Set Default Mode to Today Flights View
 if "mode" not in st.session_state:
@@ -42,7 +42,7 @@ if st.session_state.mode in ["signup", "today"]:
         day_options = list(sheet_map.keys())
         selected_day = st.selectbox("Select a day to sign up for:", day_options)
     elif st.session_state.mode == "today":
-        selected_day = "Tuesday 8/5"  # REMEMBER TO CHANGE (Figure out how to make automatic)
+        selected_day = "Monday"  # REMEMBER TO CHANGE (Figure out how to make automatic)
     sheet = sheet_map[selected_day]
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -207,9 +207,6 @@ elif st.session_state.mode == "tracker":
         st.info("No signup data available.")
 
 
-
-
-
 # Only show upcoming flights in "today" mode
 if st.session_state.mode == "today":
     st.markdown("---")
@@ -222,13 +219,13 @@ if st.session_state.mode == "today":
             return None
 
     if "Parsed Time" not in df.columns:
-        df["Parsed Time"] = df["SCHED DEP"].apply(parse_time)
+        df["Parsed Time"] = df["ETD"].apply(parse_time)
 
-    iad_time = pytz.timezone("America/Denver")
+    iad_time = pytz.timezone("America/Los_Angeles")
     now_ct = datetime.now(iad_time).replace(second=0, microsecond=0).time()
     filtered_df = df[df["Parsed Time"].notnull() & (df["Parsed Time"] >= now_ct)]
 
     if not filtered_df.empty:
-        st.dataframe(filtered_df[["DEP GATE", "Flight Num", "ARR", "SCHED DEP", "Est. Boarding Start", "Observers"]], hide_index = True)
+        st.dataframe(filtered_df[["DEP GATE", "Flight Num", "ARR", "ETD", "Est. Boarding Start", "Observers"]], hide_index = True)
     else:
         st.info("No upcoming flights found.")
