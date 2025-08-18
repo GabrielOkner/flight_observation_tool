@@ -261,16 +261,42 @@ try:
                 final_display_df = display_df[list(actual_cols_to_display.keys())].rename(columns=actual_cols_to_display)
 
 
-                # Format time columns for display
+                # --- NEW: Highlighting Logic ---
+                def highlight_boarding_soon(row):
+                    """Highlights a row yellow if boarding starts within 30 minutes."""
+                    now = pd.Timestamp.now(tz=PACIFIC_TZ)
+                    thirty_minutes_from_now = now + timedelta(minutes=30)
+                    style = ''
+                    # Check if 'Board Start' is a valid timestamp and falls within the next 30 minutes
+                    if pd.notna(row['Board Start']) and now <= row['Board Start'] <= thirty_minutes_from_now:
+                        style = 'background-color: #FFC300; color: black;' # Yellow background with black text
+                    return [style] * len(row)
+
+
+                styler = final_display_df.style
+
+
+                # Only apply the highlight for today's flights
+                if actual_sheet_name == current_day_sheet_name:
+                    styler = styler.apply(highlight_boarding_soon, axis=1)
+
+
+                # Format time columns for display after applying styles
+                format_dict = {}
                 if 'Board Start' in final_display_df.columns:
-                    final_display_df['Board Start'] = pd.to_datetime(final_display_df['Board Start']).dt.strftime('%-I:%M %p')
+                    format_dict['Board Start'] = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 if 'Board End' in final_display_df.columns:
-                    final_display_df['Board End'] = pd.to_datetime(final_display_df['Board End']).dt.strftime('%-I:%M %p')
+                    format_dict['Board End'] = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 if 'ETD (Sched Dep)' in final_display_df.columns:
-                    final_display_df['ETD (Sched Dep)'] = pd.to_datetime(final_display_df['ETD (Sched Dep)']).dt.strftime('%-I:%M %p')
+                    format_dict['ETD (Sched Dep)'] = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
+                
+                if format_dict:
+                    styler = styler.format(format_dict)
 
 
-                st.dataframe(final_display_df, hide_index=True, use_container_width=True)
+                st.dataframe(styler, hide_index=True, use_container_width=True)
+                # --- END of Highlighting Logic ---
+
             else:
                 st.info(f"No flights to display for {actual_sheet_name} based on criteria.")
         else:
@@ -341,7 +367,7 @@ try:
 
 
                         name_to_check = name.strip()
-                       
+                        
                         is_unassigned = all_flights_for_scheduling['Observers'].str.strip() == ''
                         is_assigned_to_me = all_flights_for_scheduling['Observers'].str.contains(name_to_check, case=False, na=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
@@ -362,7 +388,7 @@ try:
                         available_flights_pool = candidate_flights[
                             ~candidate_flights['FLIGHT OUT'].isin(pre_assigned_flight_nums)
                         ].copy()
-                       
+                        
                         schedule = []
                         if not pre_assigned_flights.empty:
                             pre_assigned_flights = pre_assigned_flights.sort_values(by='Est. Boarding Start')
@@ -433,7 +459,7 @@ try:
                                     hours = diff_mins // 60
                                     mins = diff_mins % 60
                                     time_between = f"{hours:01d}:{mins:02d}"
-                               
+                                
                                 is_preassigned = not pre_assigned_flights.empty and flight['FLIGHT OUT'] in pre_assigned_flights['FLIGHT OUT'].values
 
 
@@ -459,59 +485,59 @@ try:
                             st.info("No available flights match your criteria for a suggested schedule.")
 
 
-            if st.session_state.suggested_schedule is not None and not st.session_state.suggested_schedule.empty:
-                st.markdown("---")
-                st.subheader("Review and Confirm Your Schedule")
+        if st.session_state.suggested_schedule is not None and not st.session_state.suggested_schedule.empty:
+            st.markdown("---")
+            st.subheader("Review and Confirm Your Schedule")
 
 
-                select_all = st.checkbox("Select all flights", key="select_all_checkbox")
-               
-                schedule_df = st.session_state.suggested_schedule
-                if select_all:
-                    schedule_df["checkbox"] = True
-               
-                schedule_list = schedule_df.to_dict('records')
+            select_all = st.checkbox("Select all flights", key="select_all_checkbox")
+            
+            schedule_df = st.session_state.suggested_schedule
+            if select_all:
+                schedule_df["checkbox"] = True
+            
+            schedule_list = schedule_df.to_dict('records')
 
 
-                edited_schedule = st.data_editor(
-                    schedule_list,
-                    column_order=["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
-                    column_config={
-                        "checkbox": st.column_config.CheckboxColumn(
-                            "Sign up?",
-                            help="Select flights to sign up for. Pre-assigned flights are selected by default.",
-                            default=False
-                        ),
-                        "Gate": "Gate",
-                        "Flight #": "Flight",
-                        "Destination": "Dest",
-                        "Boarding Start": "Board Start",
-                        "Boarding End": "Board End",
-                        "Time Between": "Time Between",
-                        "Flight_Num_hidden": None
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    key="editable_schedule"
-                )
+            edited_schedule = st.data_editor(
+                schedule_list,
+                column_order=["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
+                column_config={
+                    "checkbox": st.column_config.CheckboxColumn(
+                        "Sign up?",
+                        help="Select flights to sign up for. Pre-assigned flights are selected by default.",
+                        default=False
+                    ),
+                    "Gate": "Gate",
+                    "Flight #": "Flight",
+                    "Destination": "Dest",
+                    "Boarding Start": "Board Start",
+                    "Boarding End": "Board End",
+                    "Time Between": "Time Between",
+                    "Flight_Num_hidden": None
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editable_schedule"
+            )
 
 
-                selected_flights_to_sign_up = [
-                    row['Flight #'] for row in edited_schedule if row['checkbox']
-                ]
+            selected_flights_to_sign_up = [
+                row['Flight #'] for row in edited_schedule if row['checkbox']
+            ]
 
 
-                if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True, key="confirm_and_signup_button"):
-                    if not name.strip():
-                        st.warning("Please enter your name to sign up for flights.")
-                    elif not selected_flights_to_sign_up:
-                        st.warning("Please select at least one flight to sign up for.")
-                    else:
-                        sign_up_for_flights(name, selected_flights_to_sign_up)
+            if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True, key="confirm_and_signup_button"):
+                if not name.strip():
+                    st.warning("Please enter your name to sign up for flights.")
+                elif not selected_flights_to_sign_up:
+                    st.warning("Please select at least one flight to sign up for.")
+                else:
+                    sign_up_for_flights(name, selected_flights_to_sign_up)
 
 
-            elif st.session_state.suggested_schedule is not None and st.session_state.suggested_schedule.empty:
-                st.info("No available flights match your criteria for a suggested schedule.")
+        elif st.session_state.suggested_schedule is not None and st.session_state.suggested_schedule.empty:
+            st.info("No available flights match your criteria for a suggested schedule.")
 
 
     # ==============================================================================
@@ -556,7 +582,7 @@ try:
                         except AttributeError:
                             etd_str = str(row['ETD/ACT']) # Fallback for non-datetime types
                     # --- FIX END ---
-                   
+                    
                     flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {etd_str} → {row['ARR']} | Observers: {row['Observers']}"
                     flight_num_to_update = str(row['FLIGHT OUT'])
 
@@ -592,7 +618,7 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
-       
+        
         observer_data = {}
         fleet_type_counts = {}
         concourse_counts = {}
@@ -605,19 +631,19 @@ try:
 
         for sheet_name in relevant_sheet_names:
             df_sheet = get_sheet_data(gc, sheet_name)
-           
+            
             required_cols = ["Observers", "Fleet Type Grouped", "DEP GATE", "Region"]
             if df_sheet is not None and not df_sheet.empty and all(col in df_sheet.columns for col in required_cols):
                 df_sheet.dropna(subset=["Observers"], inplace=True)
-               
+                
                 for _, row in df_sheet.iterrows():
                     observers_str = str(row["Observers"])
                     fleet_type = str(row["Fleet Type Grouped"]).strip()
                     concourse = str(row["DEP GATE"]).strip()[0] if str(row["DEP GATE"]).strip() else "N/A"
                     region = str(row["Region"]).strip()
-                   
+                    
                     observers_list = [name.strip() for name in observers_str.split(',') if name.strip()]
-                   
+                    
                     num_observers_on_flight = len(observers_list)
                     if num_observers_on_flight > 0:
                         if fleet_type: fleet_type_counts[fleet_type] = fleet_type_counts.get(fleet_type, 0) + num_observers_on_flight
@@ -633,7 +659,7 @@ try:
                                 "Concourses": {},
                                 "Regions": {}
                             }
-                       
+                        
                         observer_data[name]["Total Observations"] += 1
                         if fleet_type: observer_data[name]["Fleet Types"][fleet_type] = observer_data[name]["Fleet Types"].get(fleet_type, 0) + 1
                         if concourse != "N/A": observer_data[name]["Concourses"][concourse] = observer_data[name]["Concourses"].get(concourse, 0) + 1
@@ -658,11 +684,11 @@ try:
 
 
             st.markdown("---")
-           
+            
             summary_list = []
             for name, data in observer_data.items():
                 summary_list.append({"Observer": name, "Total Observations": data["Total Observations"]})
-           
+            
             df_summary = pd.DataFrame(summary_list).sort_values(by="Total Observations", ascending=False).reset_index(drop=True)
 
 
