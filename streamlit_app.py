@@ -91,7 +91,7 @@ def get_sheet_data(_gc, sheet_name):
 
 
 
-        cols_to_str = ['FLIGHT OUT', 'Observers', 'Fleet Type Grouped', 'DEP GATE', 'Region']
+        cols_to_str = ['Flight Num', 'Observers', 'Fleet Type Grouped', 'DEP GATE', 'Region']
         if sheet_name != 'Scheduler' and 'MANDATORY OBSERVER' in df.columns:
             cols_to_str.append('MANDATORY OBSERVER')
 
@@ -137,7 +137,7 @@ def sign_up_for_flights(name, flights_to_sign_up):
         return False
 
 
-    all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("FLIGHT OUT") + 1)
+    all_flight_nums = sheet_to_update.col_values(df.columns.get_loc("Flight Num") + 1)
     observer_col_index = df.columns.get_loc("Observers") + 1
 
 
@@ -244,7 +244,7 @@ try:
             if not display_df.empty:
                 cols_to_display = {
                     "DEP GATE": "Gate",
-                    "FLIGHT OUT": "Flight",
+                    "Flight Num": "Flight",
                     "ARR": "Dest",
                     "ETD/ACT": "ETD (Sched Dep)", # Use ETD/ACT
                     "Est. Boarding Start": "Board Start",
@@ -384,9 +384,9 @@ try:
                         ].copy()
 
 
-                        pre_assigned_flight_nums = pre_assigned_flights['FLIGHT OUT'].tolist()
+                        pre_assigned_flight_nums = pre_assigned_flights['Flight Num'].tolist()
                         available_flights_pool = candidate_flights[
-                            ~candidate_flights['FLIGHT OUT'].isin(pre_assigned_flight_nums)
+                            ~candidate_flights['Flight Num'].isin(pre_assigned_flight_nums)
                         ].copy()
                         
                         schedule = []
@@ -441,7 +441,7 @@ try:
                                 best_choice = potential_next_flights.iloc[0]
                                 user_observer_state['schedule'].append(best_choice.to_dict())
                                 user_observer_state['lastFlight'] = best_choice.to_dict()
-                                available_flights_pool = available_flights_pool[available_flights_pool['FLIGHT OUT'] != best_choice['FLIGHT OUT']]
+                                available_flights_pool = available_flights_pool[available_flights_pool['Flight Num'] != best_choice['Flight Num']]
                                 assignments_made_in_round = True
 
 
@@ -460,7 +460,7 @@ try:
                                     mins = diff_mins % 60
                                     time_between = f"{hours:01d}:{mins:02d}"
                                 
-                                is_preassigned = not pre_assigned_flights.empty and flight['FLIGHT OUT'] in pre_assigned_flights['FLIGHT OUT'].values
+                                is_preassigned = not pre_assigned_flights.empty and flight['Flight Num'] in pre_assigned_flights['Flight Num'].values
 
 
 
@@ -468,12 +468,12 @@ try:
                                 final_output_data.append([
                                     is_preassigned,
                                     flight['DEP GATE'],
-                                    flight['FLIGHT OUT'],
+                                    flight['Flight Num'],
                                     flight['ARR'],
                                     flight['Est. Boarding Start'].strftime('%-I:%M %p'),
                                     flight['Est. Boarding End'].strftime('%-I:%M %p'),
                                     time_between,
-                                    flight['FLIGHT OUT']
+                                    flight['Flight Num']
                                 ])
                                 previous_flight_end = flight['Est. Boarding End']
 
@@ -567,7 +567,7 @@ try:
             df = get_sheet_data(gc, actual_sheet_name)
             if df is not None and not df.empty:
                 sheet_to_update = sheet_map[actual_sheet_name]
-                flight_num_col_idx = df.columns.get_loc("FLIGHT OUT") + 1
+                flight_num_col_idx = df.columns.get_loc("Flight Num") + 1
                 observer_col_idx = df.columns.get_loc("Observers") + 1
                 live_flight_nums = sheet_to_update.col_values(flight_num_col_idx)
 
@@ -583,8 +583,8 @@ try:
                             etd_str = str(row['ETD/ACT']) # Fallback for non-datetime types
                     # --- FIX END ---
                     
-                    flight_label = f"{row['CARR (IATA)']} {row['FLIGHT OUT']} | Gate {row['DEP GATE']} | {etd_str} → {row['ARR']} | Observers: {row['Observers']}"
-                    flight_num_to_update = str(row['FLIGHT OUT'])
+                    flight_label = f"{row['CARR (IATA)']} {row['Flight Num']} | Gate {row['DEP GATE']} | {etd_str} → {row['ARR']} | Observers: {row['Observers']}"
+                    flight_num_to_update = str(row['Flight Num'])
 
 
                     if st.button(flight_label, key=f"manual_{actual_sheet_name}_{flight_num_to_update}_{j}"):
@@ -598,7 +598,7 @@ try:
                                 observers_list.append(name.strip())
                                 new_observers = ", ".join(observers_list)
                                 sheet_to_update.update_cell(sheet_row, observer_col_idx, new_observers)
-                                st.success(f"Signed up for flight {row['CARR (IATA)']} {row['FLIGHT OUT']} on {actual_sheet_name}!")
+                                st.success(f"Signed up for flight {row['CARR (IATA)']} {row['Flight Num']} on {actual_sheet_name}!")
                                 st.cache_data.clear()
                                 st.rerun()
                             else:
