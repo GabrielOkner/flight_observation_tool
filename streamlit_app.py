@@ -8,11 +8,11 @@ import pytz
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Flight Observer", layout="wide")
-st.title("LAX Flight Observation Tool")
+st.title("EWR Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
-PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
+PACIFIC_TZ = pytz.timezone("America/New_York")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
 
