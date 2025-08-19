@@ -222,8 +222,8 @@ try:
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
-                # UPDATED: Using a more reliable CSS method to hide the column
-                styler = styler.set_properties(subset=['minutes_to_dep'], **{'display': 'none'})
+                # UPDATED: Using the pandas styler .hide() method to reliably hide the column
+                styler = styler.hide(['minutes_to_dep'], axis=1)
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
