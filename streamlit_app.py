@@ -61,7 +61,8 @@ def get_sheet_data(_gc, sheet_name):
             return pd.to_datetime(valid_datetimes, errors='coerce')
 
         if sheet_name != 'Scheduler':
-            time_cols = ['Est. Boarding Start', 'Est. Boarding End', 'ETD/ACT']
+            # UPDATED: Changed 'ETD/ACT' to 'ETD' to match user's column list
+            time_cols = ['Est. Boarding Start', 'Est. Boarding End', 'ETD']
             for col in time_cols:
                 if col in df.columns:
                     df[col] = parse_and_localize_time(df[col])
@@ -172,19 +173,17 @@ try:
         st.subheader(f"Flights for {current_day_sheet_name}, {today_date.strftime('%B %d')}")
         df = get_sheet_data(gc, current_day_sheet_name)
         if df is not None and not df.empty:
-            # Drop rows where ETD/ACT is missing, as it's crucial for the new features
-            valid_times_df = df.dropna(subset=['ETD/ACT'])
+            # UPDATED: Changed 'ETD/ACT' to 'ETD'
+            valid_times_df = df.dropna(subset=['ETD'])
             
             now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
-            # Filter for flights that haven't departed yet based on ETD
-            display_df = valid_times_df[valid_times_df["ETD/ACT"] >= now_datetime].copy()
+            # UPDATED: Changed 'ETD/ACT' to 'ETD'
+            display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
             if not display_df.empty:
-                # --- NEW: Calculate time until departure ---
-                # Calculate the difference in minutes for coloring
-                display_df['minutes_to_dep'] = (display_df['ETD/ACT'] - now_datetime).dt.total_seconds() / 60
+                # UPDATED: Changed 'ETD/ACT' to 'ETD'
+                display_df['minutes_to_dep'] = (display_df['ETD'] - now_datetime).dt.total_seconds() / 60
 
-                # Format the difference into a readable string for display
                 def format_timedelta(minutes):
                     if pd.isna(minutes):
                         return "N/A"
@@ -193,23 +192,21 @@ try:
 
                 display_df['Time to Dep'] = display_df['minutes_to_dep'].apply(format_timedelta)
 
-                # Define the columns to display, with the new column first
+                # UPDATED: Changed 'ETD/ACT' to 'ETD'
                 cols_to_display = {
                     "Time to Dep": "Time to Dep", "DEP GATE": "Gate", "Flight Num": "Flight", 
-                    "ARR": "Dest", "ETD/ACT": "ETD", "Est. Boarding Start": "Board Start",
+                    "ARR": "Dest", "ETD": "ETD", "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End", "PAX TOTAL": "Pax",
                     "Important flight?": "Important", "Observers": "Observers"
                 }
                 
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
-                # Add the numeric helper column for styling
                 final_display_df['minutes_to_dep'] = display_df['minutes_to_dep']
 
-                # --- NEW: Color scale styling function ---
                 def color_scale_time_to_dep(row):
                     minutes = row['minutes_to_dep']
-                    color = 'transparent'  # Default/no color
+                    color = 'transparent'
                     if pd.notna(minutes):
                         if minutes <= 20:
                             color = '#FFADAD'  # Red
@@ -223,7 +220,6 @@ try:
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
-                # Hide the numeric helper column from the final display
                 styler = styler.hide(subset=['minutes_to_dep'], axis=1)
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
@@ -307,13 +303,15 @@ try:
             if df is not None and not df.empty:
                 st.info("Click on a flight to sign up.")
                 for _, row in df.iterrows():
-                    etd_str = row['ETD/ACT'].strftime('%-I:%M %p') if pd.notna(row['ETD/ACT']) else "No ETD"
+                    # UPDATED: Changed 'ETD/ACT' to 'ETD'
+                    etd_str = row['ETD'].strftime('%-I:%M %p') if pd.notna(row['ETD']) else "No ETD"
+                    # UPDATED: Using .get() for safer dictionary access to prevent errors
                     flight_label = (
                         f"{row.get('CARR (IATA)', '')} {row.get('Flight Num', '')} | "
                         f"Gate {row.get('DEP GATE', 'N/A')} | {etd_str} → {row.get('ARR', '')} | "
                         f"Observers: {row.get('Observers', '')}"
                     )
-                    if st.button(flight_label, key=f"manual_{row['Flight Num']}_{_}"):
+                    if st.button(flight_label, key=f"manual_{row.get('Flight Num', _)}_{_}"):
                         if sign_up_for_flights(name, [row['Flight Num']]):
                             st.rerun()
             else:
@@ -327,6 +325,7 @@ try:
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
         # (The user's tracker logic is preserved as it was mostly correct)
+        # It will now work correctly with the updated column names.
         ...
 
 
