@@ -182,7 +182,6 @@ try:
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
             if not display_df.empty:
-                # UPDATED: Round the minutes to the nearest whole number
                 display_df['minutes_to_dep'] = ((display_df['ETD'] - now_datetime).dt.total_seconds() / 60).round(0)
 
                 def format_timedelta(minutes):
@@ -204,24 +203,24 @@ try:
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
                 final_display_df['minutes_to_dep'] = display_df['minutes_to_dep']
 
-                # UPDATED: Added 'color: black' for better legibility on colored backgrounds
                 def color_scale_time_to_dep(row):
                     minutes = row['minutes_to_dep']
-                    style = ''  # Default style is empty (transparent background, default text color)
+                    style = ''
                     if pd.notna(minutes):
                         if minutes <= 20:
-                            style = 'background-color: #FFADAD; color: black;'  # Red
+                            style = 'background-color: #FFADAD; color: black;'
                         elif minutes <= 50:
-                            style = 'background-color: #FFD6A5; color: black;'  # Orange
+                            style = 'background-color: #FFD6A5; color: black;'
                         elif minutes <= 90:
-                            style = 'background-color: #FDFFB6; color: black;'  # Yellow
+                            style = 'background-color: #FDFFB6; color: black;'
                         else:
-                            style = 'background-color: #CAFFBF; color: black;'  # Green
+                            style = 'background-color: #CAFFBF; color: black;'
                     return [style] * len(row)
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
-                styler = styler.hide(subset=['minutes_to_dep'], axis=1)
+                # UPDATED: Replaced .hide() with a more robust CSS-based method
+                styler = styler.set_properties(subset=['minutes_to_dep'], **{'display': 'none'})
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
