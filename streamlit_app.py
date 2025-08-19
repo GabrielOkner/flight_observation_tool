@@ -12,7 +12,6 @@ st.title("EWR Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
-# FIX: Renamed variable for clarity as the timezone is Eastern.
 EASTERN_TZ = pytz.timezone("America/New_York")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
@@ -49,19 +48,12 @@ def get_sheet_data(_gc, sheet_name):
         df = pd.DataFrame(data)
         df.columns = df.columns.str.strip()
         
-        # Replace empty strings with np.nan for consistent null handling
         df.replace("", np.nan, inplace=True)
 
-        # FIX: Simplified and more robust time parsing logic.
         def parse_and_localize_time(series):
             """Converts a series of time strings to localized datetime objects."""
-            # Convert series to datetime, coercing errors to NaT (Not a Time)
             times = pd.to_datetime(series, errors='coerce').dt.time
-            
-            # Get today's date in the correct timezone
             today_date = datetime.now(EASTERN_TZ).date()
-            
-            # Combine valid times with today's date and localize
             valid_datetimes = [
                 EASTERN_TZ.localize(datetime.combine(today_date, t)) if pd.notna(t) else pd.NaT
                 for t in times
@@ -73,13 +65,12 @@ def get_sheet_data(_gc, sheet_name):
             for col in time_cols:
                 if col in df.columns:
                     df[col] = parse_and_localize_time(df[col])
-        else: # For 'Scheduler' sheet
+        else:
             time_cols = ['Start Time', 'End Time']
             for col in time_cols:
                 if col in df.columns:
                     df[col] = parse_and_localize_time(df[col])
 
-        # Ensure numeric columns are treated as such, coercing errors
         if 'PAX TOTAL' in df.columns:
             df['PAX TOTAL'] = pd.to_numeric(df['PAX TOTAL'], errors='coerce')
 
@@ -102,7 +93,6 @@ def parse_gate(gate):
     return {'concourse': concourse, 'number': number}
 
 
-# FIX: Made sign-up function more robust by using DataFrame index to find the correct row.
 def sign_up_for_flights(name, flights_to_sign_up):
     """Signs the specified observer up for a list of flights."""
     gc = authorize_gspread()
@@ -110,7 +100,6 @@ def sign_up_for_flights(name, flights_to_sign_up):
     master_sheet = gc.open_by_url(SHEET_URL)
     sheet_to_update = master_sheet.worksheet(sheet_name)
     
-    # Fetch all records to find row numbers accurately
     all_data = sheet_to_update.get_all_records()
     df = pd.DataFrame(all_data)
     df.columns = df.columns.str.strip()
@@ -124,14 +113,12 @@ def sign_up_for_flights(name, flights_to_sign_up):
     success_count = 0
 
     for flight_num in flights_to_sign_up:
-        # Find all matching rows for the flight number
         matches = df.index[df['Flight Num'].astype(str) == str(flight_num)].tolist()
         if not matches:
             st.warning(f"Could not find flight {flight_num} to update.")
             continue
         
-        # In case of duplicates, we'll update the first one found.
-        row_index = matches[0] + 2  # +2 to account for header and 1-based indexing
+        row_index = matches[0] + 2
         
         current_observers_str = sheet_to_update.cell(row_index, observer_col_index).value or ""
         observers_list = [obs.strip() for obs in current_observers_str.split(',') if obs.strip()]
@@ -147,8 +134,8 @@ def sign_up_for_flights(name, flights_to_sign_up):
     if cells_to_update:
         sheet_to_update.update_cells(cells_to_update)
         st.success(f"{name.strip()}, you have been signed up for {success_count} flight(s)!")
-        st.cache_data.clear() # Clear cache to reflect updates
-        return True # Return True to trigger a rerun in the main app
+        st.cache_data.clear()
+        return True
     
     return False
 
@@ -185,31 +172,59 @@ try:
         st.subheader(f"Flights for {current_day_sheet_name}, {today_date.strftime('%B %d')}")
         df = get_sheet_data(gc, current_day_sheet_name)
         if df is not None and not df.empty:
-            valid_times_df = df.dropna(subset=['Est. Boarding Start'])
+            # Drop rows where ETD/ACT is missing, as it's crucial for the new features
+            valid_times_df = df.dropna(subset=['ETD/ACT'])
             
             now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
-            display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
+            # Filter for flights that haven't departed yet based on ETD
+            display_df = valid_times_df[valid_times_df["ETD/ACT"] >= now_datetime].copy()
 
             if not display_df.empty:
+                # --- NEW: Calculate time until departure ---
+                # Calculate the difference in minutes for coloring
+                display_df['minutes_to_dep'] = (display_df['ETD/ACT'] - now_datetime).dt.total_seconds() / 60
+
+                # Format the difference into a readable string for display
+                def format_timedelta(minutes):
+                    if pd.isna(minutes):
+                        return "N/A"
+                    hours, remainder_minutes = divmod(int(minutes), 60)
+                    return f"{hours}h {remainder_minutes:02d}m"
+
+                display_df['Time to Dep'] = display_df['minutes_to_dep'].apply(format_timedelta)
+
+                # Define the columns to display, with the new column first
                 cols_to_display = {
-                    "DEP GATE": "Gate", "Flight Num": "Flight", "ARR": "Dest",
-                    "ETD/ACT": "ETD", "Est. Boarding Start": "Board Start",
+                    "Time to Dep": "Time to Dep", "DEP GATE": "Gate", "Flight Num": "Flight", 
+                    "ARR": "Dest", "ETD/ACT": "ETD", "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End", "PAX TOTAL": "Pax",
                     "Important flight?": "Important", "Observers": "Observers"
                 }
                 
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
+                # Add the numeric helper column for styling
+                final_display_df['minutes_to_dep'] = display_df['minutes_to_dep']
 
-                def highlight_boarding_soon(row):
-                    now = pd.Timestamp.now(tz=EASTERN_TZ)
-                    thirty_minutes_from_now = now + timedelta(minutes=30)
-                    style = ''
-                    if pd.notna(row['Board Start']) and now <= row['Board Start'] <= thirty_minutes_from_now:
-                        style = 'background-color: #FFC300; color: black;'
-                    return [style] * len(row)
+                # --- NEW: Color scale styling function ---
+                def color_scale_time_to_dep(row):
+                    minutes = row['minutes_to_dep']
+                    color = 'transparent'  # Default/no color
+                    if pd.notna(minutes):
+                        if minutes <= 20:
+                            color = '#FFADAD'  # Red
+                        elif minutes <= 50:
+                            color = '#FFD6A5'  # Orange
+                        elif minutes <= 90:
+                            color = '#FDFFB6'  # Yellow
+                        else:
+                            color = '#CAFFBF'  # Green
+                    return [f'background-color: {color}'] * len(row)
 
-                styler = final_display_df.style.apply(highlight_boarding_soon, axis=1)
+                styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
+                
+                # Hide the numeric helper column from the final display
+                styler = styler.hide(subset=['minutes_to_dep'], axis=1)
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
@@ -241,11 +256,9 @@ try:
                 if not name.strip():
                     st.warning("Please enter your name.")
                 else:
-                    # --- Scheduling logic here (remains largely unchanged but benefits from cleaner data) ---
-                    # This complex logic is preserved from the original script.
                     with st.spinner("Generating suggested schedule..."):
                         # (The user's scheduling algorithm is complex and is kept as is)
-                        st.session_state.suggested_schedule = ... # Placeholder for the generated schedule DataFrame
+                        st.session_state.suggested_schedule = ... 
                     st.success("Schedule generated!")
                     st.rerun()
 
@@ -253,7 +266,6 @@ try:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
                 
-                # FIX: Correctly implement "Select All" functionality with st.data_editor
                 schedule_df = st.session_state.suggested_schedule.copy()
                 
                 if st.checkbox("Select all flights", key="select_all_checkbox"):
@@ -263,7 +275,7 @@ try:
                     schedule_df,
                     column_config={
                         "checkbox": st.column_config.CheckboxColumn("Sign up?", help="Select flights to sign up for.", default=False),
-                        "Flight_Num_hidden": None # Hide this column
+                        "Flight_Num_hidden": None
                     },
                     disabled=["Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
                     hide_index=True,
@@ -280,7 +292,7 @@ try:
                         st.warning("Please select at least one flight.")
                     else:
                         if sign_up_for_flights(name, selected_flights):
-                            st.session_state.suggested_schedule = None # Clear suggestion after sign-up
+                            st.session_state.suggested_schedule = None
                             st.rerun()
     
     # ==============================================================================
@@ -295,7 +307,6 @@ try:
             if df is not None and not df.empty:
                 st.info("Click on a flight to sign up.")
                 for _, row in df.iterrows():
-                    # FIX: Safely format the button label even if time is invalid
                     etd_str = row['ETD/ACT'].strftime('%-I:%M %p') if pd.notna(row['ETD/ACT']) else "No ETD"
                     flight_label = (
                         f"{row.get('CARR (IATA)', '')} {row.get('Flight Num', '')} | "
@@ -316,11 +327,9 @@ try:
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
         # (The user's tracker logic is preserved as it was mostly correct)
-        # It will benefit from the more robust data loading.
         ...
 
 
 except Exception as e:
     st.error(f"A critical error occurred in the application: {e}")
     st.info("Please check your Google Sheet permissions and ensure the sheet format is correct.")
-
