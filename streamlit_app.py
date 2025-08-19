@@ -175,17 +175,21 @@ try:
         st.subheader(f"Flights for {current_day_sheet_name}, {today_date.strftime('%B %d')}")
         df = get_sheet_data(gc, current_day_sheet_name)
         if df is not None and not df.empty:
-            valid_times_df = df.dropna(subset=['ETD'])
+            # UPDATED: Ensure Est. Boarding Start exists before filtering
+            valid_times_df = df.dropna(subset=['Est. Boarding Start'])
             
             now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
-            display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
+            # UPDATED: Filter by boarding time and sort
+            display_df = valid_times_df[valid_times_df["Est. Boarding Start"] >= now_datetime].copy()
+            display_df = display_df.sort_values(by="Est. Boarding Start")
+
 
             if not display_df.empty:
-                # UPDATED: More robust cleaning of the Observers column
                 if 'Observers' in display_df.columns:
                     display_df['Observers'] = display_df['Observers'].fillna('').astype(str).replace('None', '')
 
-                display_df['minutes_to_dep'] = ((display_df['ETD'] - now_datetime).dt.total_seconds() / 60).round(0)
+                # UPDATED: Calculate minutes to boarding
+                display_df['minutes_to_board'] = ((display_df['Est. Boarding Start'] - now_datetime).dt.total_seconds() / 60).round(0)
 
                 def format_timedelta(minutes):
                     if pd.isna(minutes):
@@ -193,9 +197,9 @@ try:
                     hours, remainder_minutes = divmod(int(minutes), 60)
                     return f"{hours}h {remainder_minutes:02d}m"
 
-                # UPDATED: Use minutes_to_dep directly and rename it for display
+                # UPDATED: Use minutes_to_board as the primary time column
                 cols_to_display = {
-                    "minutes_to_dep": "Time to Dep", "DEP GATE": "Gate", "Flight Num": "Flight", 
+                    "minutes_to_board": "Time to Board", "DEP GATE": "Gate", "Flight Num": "Flight", 
                     "ARR": "Dest", "ETD": "ETD", "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End", "PAX TOTAL": "Pax",
                     "Important flight?": "Important", "Observers": "Observers"
@@ -204,27 +208,27 @@ try:
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
 
-                # UPDATED: Color function now uses the renamed column 'Time to Dep'
-                def color_scale_time_to_dep(row):
-                    minutes = row['Time to Dep']
+                # UPDATED: Color function now uses the new 'Time to Board' column
+                def color_scale_time_to_board(row):
+                    minutes = row['Time to Board']
                     style = ''
                     if pd.notna(minutes):
-                        if minutes <= 20:
+                        if minutes <= 15: # Adjusted thresholds for boarding
                             style = 'background-color: #FFADAD; color: black;'
-                        elif minutes <= 50:
+                        elif minutes <= 30:
                             style = 'background-color: #FFD6A5; color: black;'
-                        elif minutes <= 90:
+                        elif minutes <= 60:
                             style = 'background-color: #FDFFB6; color: black;'
                         else:
                             style = 'background-color: #CAFFBF; color: black;'
                     return [style] * len(row)
 
-                styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
+                styler = final_display_df.style.apply(color_scale_time_to_board, axis=1)
                 
-                # UPDATED: Format the 'Time to Dep' column after styling logic is applied
+                # UPDATED: Format the new 'Time to Board' column
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
-                    'Time to Dep': format_timedelta,
+                    'Time to Board': format_timedelta,
                     'Board Start': time_format, 
                     'Board End': time_format, 
                     'ETD': time_format
