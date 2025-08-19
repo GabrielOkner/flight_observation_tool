@@ -193,10 +193,9 @@ try:
                     hours, remainder_minutes = divmod(int(minutes), 60)
                     return f"{hours}h {remainder_minutes:02d}m"
 
-                display_df['Time to Dep'] = display_df['minutes_to_dep'].apply(format_timedelta)
-
+                # UPDATED: Use minutes_to_dep directly and rename it for display
                 cols_to_display = {
-                    "Time to Dep": "Time to Dep", "DEP GATE": "Gate", "Flight Num": "Flight", 
+                    "minutes_to_dep": "Time to Dep", "DEP GATE": "Gate", "Flight Num": "Flight", 
                     "ARR": "Dest", "ETD": "ETD", "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End", "PAX TOTAL": "Pax",
                     "Important flight?": "Important", "Observers": "Observers"
@@ -204,10 +203,10 @@ try:
                 
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
-                final_display_df['minutes_to_dep'] = display_df['minutes_to_dep']
 
+                # UPDATED: Color function now uses the renamed column 'Time to Dep'
                 def color_scale_time_to_dep(row):
-                    minutes = row['minutes_to_dep']
+                    minutes = row['Time to Dep']
                     style = ''
                     if pd.notna(minutes):
                         if minutes <= 20:
@@ -222,12 +221,13 @@ try:
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
-                # UPDATED: Using the pandas styler .hide() method to reliably hide the column
-                styler = styler.hide(['minutes_to_dep'], axis=1)
-                
+                # UPDATED: Format the 'Time to Dep' column after styling logic is applied
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
-                    'Board Start': time_format, 'Board End': time_format, 'ETD': time_format
+                    'Time to Dep': format_timedelta,
+                    'Board Start': time_format, 
+                    'Board End': time_format, 
+                    'ETD': time_format
                 })
                 
                 st.dataframe(styler, hide_index=True, use_container_width=True)
