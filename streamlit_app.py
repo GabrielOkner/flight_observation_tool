@@ -50,18 +50,29 @@ def get_sheet_data(_gc, sheet_name):
         
         df.replace("", np.nan, inplace=True)
 
+        # FIX: Made this function more robust to prevent TypeErrors
         def parse_and_localize_time(series):
-            """Converts a series of time strings to localized datetime objects."""
-            times = pd.to_datetime(series, errors='coerce').dt.time
+            """
+            Converts a series of time strings to localized datetime objects.
+            This is now more robust against mixed data types from the sheet.
+            """
+            # Step 1: Force the series to a string type and strip whitespace.
+            # This handles numbers, empty cells, and text with spaces correctly.
+            str_series = pd.Series(series, dtype=str).str.strip()
+            
+            # Step 2: Convert the cleaned strings to time objects. Errors become NaT.
+            times = pd.to_datetime(str_series, errors='coerce').dt.time
+            
+            # Step 3: Combine with today's date and localize to the correct timezone.
             today_date = datetime.now(EASTERN_TZ).date()
             valid_datetimes = [
                 EASTERN_TZ.localize(datetime.combine(today_date, t)) if pd.notna(t) else pd.NaT
                 for t in times
             ]
+            # Step 4: Return a proper pandas datetime series.
             return pd.to_datetime(valid_datetimes, errors='coerce')
 
         if sheet_name != 'Scheduler':
-            # UPDATED: Changed 'ETD/ACT' to 'ETD' to match user's column list
             time_cols = ['Est. Boarding Start', 'Est. Boarding End', 'ETD']
             for col in time_cols:
                 if col in df.columns:
@@ -173,15 +184,13 @@ try:
         st.subheader(f"Flights for {current_day_sheet_name}, {today_date.strftime('%B %d')}")
         df = get_sheet_data(gc, current_day_sheet_name)
         if df is not None and not df.empty:
-            # UPDATED: Changed 'ETD/ACT' to 'ETD'
             valid_times_df = df.dropna(subset=['ETD'])
             
             now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
-            # UPDATED: Changed 'ETD/ACT' to 'ETD'
+            # This comparison is now safe because get_sheet_data ensures 'ETD' is a datetime column
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
             if not display_df.empty:
-                # UPDATED: Changed 'ETD/ACT' to 'ETD'
                 display_df['minutes_to_dep'] = (display_df['ETD'] - now_datetime).dt.total_seconds() / 60
 
                 def format_timedelta(minutes):
@@ -192,7 +201,6 @@ try:
 
                 display_df['Time to Dep'] = display_df['minutes_to_dep'].apply(format_timedelta)
 
-                # UPDATED: Changed 'ETD/ACT' to 'ETD'
                 cols_to_display = {
                     "Time to Dep": "Time to Dep", "DEP GATE": "Gate", "Flight Num": "Flight", 
                     "ARR": "Dest", "ETD": "ETD", "Est. Boarding Start": "Board Start",
@@ -303,9 +311,7 @@ try:
             if df is not None and not df.empty:
                 st.info("Click on a flight to sign up.")
                 for _, row in df.iterrows():
-                    # UPDATED: Changed 'ETD/ACT' to 'ETD'
                     etd_str = row['ETD'].strftime('%-I:%M %p') if pd.notna(row['ETD']) else "No ETD"
-                    # UPDATED: Using .get() for safer dictionary access to prevent errors
                     flight_label = (
                         f"{row.get('CARR (IATA)', '')} {row.get('Flight Num', '')} | "
                         f"Gate {row.get('DEP GATE', 'N/A')} | {etd_str} → {row.get('ARR', '')} | "
@@ -325,7 +331,6 @@ try:
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
         # (The user's tracker logic is preserved as it was mostly correct)
-        # It will now work correctly with the updated column names.
         ...
 
 
