@@ -50,26 +50,18 @@ def get_sheet_data(_gc, sheet_name):
         
         df.replace("", np.nan, inplace=True)
 
-        # FIX: Made this function more robust to prevent TypeErrors
         def parse_and_localize_time(series):
             """
             Converts a series of time strings to localized datetime objects.
             This is now more robust against mixed data types from the sheet.
             """
-            # Step 1: Force the series to a string type and strip whitespace.
-            # This handles numbers, empty cells, and text with spaces correctly.
             str_series = pd.Series(series, dtype=str).str.strip()
-            
-            # Step 2: Convert the cleaned strings to time objects. Errors become NaT.
             times = pd.to_datetime(str_series, errors='coerce').dt.time
-            
-            # Step 3: Combine with today's date and localize to the correct timezone.
             today_date = datetime.now(EASTERN_TZ).date()
             valid_datetimes = [
                 EASTERN_TZ.localize(datetime.combine(today_date, t)) if pd.notna(t) else pd.NaT
                 for t in times
             ]
-            # Step 4: Return a proper pandas datetime series.
             return pd.to_datetime(valid_datetimes, errors='coerce')
 
         if sheet_name != 'Scheduler':
@@ -187,11 +179,11 @@ try:
             valid_times_df = df.dropna(subset=['ETD'])
             
             now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
-            # This comparison is now safe because get_sheet_data ensures 'ETD' is a datetime column
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
             if not display_df.empty:
-                display_df['minutes_to_dep'] = (display_df['ETD'] - now_datetime).dt.total_seconds() / 60
+                # UPDATED: Round the minutes to the nearest whole number
+                display_df['minutes_to_dep'] = ((display_df['ETD'] - now_datetime).dt.total_seconds() / 60).round(0)
 
                 def format_timedelta(minutes):
                     if pd.isna(minutes):
@@ -212,19 +204,20 @@ try:
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
                 final_display_df['minutes_to_dep'] = display_df['minutes_to_dep']
 
+                # UPDATED: Added 'color: black' for better legibility on colored backgrounds
                 def color_scale_time_to_dep(row):
                     minutes = row['minutes_to_dep']
-                    color = 'transparent'
+                    style = ''  # Default style is empty (transparent background, default text color)
                     if pd.notna(minutes):
                         if minutes <= 20:
-                            color = '#FFADAD'  # Red
+                            style = 'background-color: #FFADAD; color: black;'  # Red
                         elif minutes <= 50:
-                            color = '#FFD6A5'  # Orange
+                            style = 'background-color: #FFD6A5; color: black;'  # Orange
                         elif minutes <= 90:
-                            color = '#FDFFB6'  # Yellow
+                            style = 'background-color: #FDFFB6; color: black;'  # Yellow
                         else:
-                            color = '#CAFFBF'  # Green
-                    return [f'background-color: {color}'] * len(row)
+                            style = 'background-color: #CAFFBF; color: black;'  # Green
+                    return [style] * len(row)
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
