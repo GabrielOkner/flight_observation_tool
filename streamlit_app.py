@@ -181,8 +181,9 @@ try:
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
             if not display_df.empty:
+                # UPDATED: More robust cleaning of the Observers column
                 if 'Observers' in display_df.columns:
-                    display_df['Observers'] = display_df['Observers'].fillna('').astype(str)
+                    display_df['Observers'] = display_df['Observers'].fillna('').astype(str).replace('None', '')
 
                 display_df['minutes_to_dep'] = ((display_df['ETD'] - now_datetime).dt.total_seconds() / 60).round(0)
 
@@ -221,8 +222,8 @@ try:
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
-                # UPDATED: Corrected the syntax for hiding a column.
-                styler = styler.hide(subset=['minutes_to_dep'], axis=1)
+                # UPDATED: Using a more reliable CSS method to hide the column
+                styler = styler.set_properties(subset=['minutes_to_dep'], **{'display': 'none'})
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
