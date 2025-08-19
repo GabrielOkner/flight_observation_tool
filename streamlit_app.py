@@ -30,7 +30,7 @@ def authorize_gspread():
     return gspread.authorize(creds)
 
 
-@st.cache_data(ttl=300)
+# UPDATED: Removed the @st.cache_data decorator to force a refresh every time.
 def get_sheet_data(_gc, sheet_name):
     """
     Fetch and process data for a given sheet name.
@@ -138,7 +138,6 @@ def sign_up_for_flights(name, flights_to_sign_up):
     if cells_to_update:
         sheet_to_update.update_cells(cells_to_update)
         st.success(f"{name.strip()}, you have been signed up for {success_count} flight(s)!")
-        st.cache_data.clear()
         return True
     
     return False
@@ -219,7 +218,6 @@ try:
 
                 styler = final_display_df.style.apply(color_scale_time_to_dep, axis=1)
                 
-                # UPDATED: Replaced .hide() with a more robust CSS-based method
                 styler = styler.set_properties(subset=['minutes_to_dep'], **{'display': 'none'})
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
