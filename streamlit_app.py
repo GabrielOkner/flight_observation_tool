@@ -307,8 +307,10 @@ try:
 
                         name_to_check = name.strip()
 
-                        is_unassigned = all_flights_for_scheduling['Observers'].str.strip() == ''
-                        is_assigned_to_me = all_flights_for_scheduling['Observers'].str.contains(name_to_check, case=False, na=False)
+                        # Correctly identify unassigned flights by handling NaN values
+                        observers_series = all_flights_for_scheduling['Observers'].fillna('')
+                        is_unassigned = observers_series.str.strip() == ''
+                        is_assigned_to_me = observers_series.str.contains(name_to_check, case=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
 
                         user_start_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=EASTERN_TZ)
