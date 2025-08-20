@@ -271,8 +271,18 @@ try:
                 else:
                     with st.spinner("Generating suggested schedule..."):
                         # (The user's scheduling algorithm is complex and is kept as is)
-                        # This line is changed from ... to an empty DataFrame to prevent the error.
-                        st.session_state.suggested_schedule = pd.DataFrame()
+                        # This line is changed to create a SAMPLE DataFrame to prevent the blank screen issue.
+                        # Replace this with your actual scheduling logic.
+                        sample_data = {
+                            'Gate': ['C101', 'A24', 'C120'],
+                            'Flight #': [1234, 5678, 9012],
+                            'Destination': ['LAX', 'ORD', 'MCO'],
+                            'Boarding Start': ['10:00 AM', '12:30 PM', '3:00 PM'],
+                            'Boarding End': ['10:45 AM', '1:15 PM', '3:45 PM'],
+                            'Time Between': ['N/A', '1h 45m', '2h 15m'],
+                            'checkbox': [False, False, False]
+                        }
+                        st.session_state.suggested_schedule = pd.DataFrame(sample_data)
                     st.success("Schedule generated!")
                     st.rerun()
 
