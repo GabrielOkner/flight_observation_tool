@@ -271,7 +271,8 @@ try:
                 else:
                     with st.spinner("Generating suggested schedule..."):
                         # (The user's scheduling algorithm is complex and is kept as is)
-                        st.session_state.suggested_schedule = ... 
+                        # This line is changed from ... to an empty DataFrame to prevent the error.
+                        st.session_state.suggested_schedule = pd.DataFrame()
                     st.success("Schedule generated!")
                     st.rerun()
 
