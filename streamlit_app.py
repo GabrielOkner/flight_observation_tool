@@ -210,7 +210,7 @@ try:
                     return f"{hours}h {remainder_minutes:02d}m"
 
                 cols_to_display = {
-                    "minutes_to_board": "Time to Board", "DEP GATE": "Gate", "Flight Num": "Flight", 
+                    "minutes_to_board": "Time to Board", "DEP GATE": "Gate", "Flight Num": "Flight", "FLEET TYPE": "Fleet",
                     "ARR": "Dest", "ETD": "ETD", "Est. Boarding Start": "Board Start",
                     "Est. Boarding End": "Board End", "PAX TOTAL": "Pax",
                     "Important flight?": "Important", "Observers": "Observers"
