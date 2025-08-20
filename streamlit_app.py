@@ -260,64 +260,207 @@ try:
         if df is not None and not df.empty:
             name = st.text_input("Enter your name:", key="suggest_name")
 
-            time_options = [time(h, m) for h in range(24) for m in (0, 30)]
-            c1, c2 = st.columns(2)
-            user_start_time = c1.select_slider("Enter your start time:", options=time_options, value=time(9, 0), format_func=lambda t: t.strftime('%-I:%M %p'))
-            user_end_time = c2.select_slider("Enter your end time:", options=time_options, value=time(17, 0), format_func=lambda t: t.strftime('%-I:%M %p'))
+            time_options = []
+            for hour in range(7, 24):
+                time_options.append(time(hour, 0))
+                if hour < 23:
+                    time_options.append(time(hour, 30))
 
-            if st.button("Suggest My Schedule", use_container_width=True, key='suggest_button'):
+            default_start_time = time(9, 0)
+            default_end_time = time(17, 0)
+
+            c1, c2 = st.columns(2)
+            user_start_time = c1.select_slider(
+                "Enter your start time:",
+                options=time_options,
+                value=default_start_time,
+                format_func=lambda t: t.strftime('%-I:%M %p'),
+                key="suggest_start_time_slider"
+            )
+            user_end_time = c2.select_slider(
+                "Enter your end time:",
+                options=time_options,
+                value=default_end_time,
+                format_func=lambda t: t.strftime('%-I:%M %p'),
+                key="suggest_end_time_slider"
+            )
+
+            if st.button("Suggest My Schedule", use_container_width=True, key="suggest_schedule_button"):
                 if not name.strip():
                     st.warning("Please enter your name.")
                 else:
                     with st.spinner("Generating suggested schedule..."):
-                        # (The user's scheduling algorithm is complex and is kept as is)
-                        # This line is changed to create a SAMPLE DataFrame to prevent the blank screen issue.
-                        # Replace this with your actual scheduling logic.
-                        sample_data = {
-                            'Gate': ['C101', 'A24', 'C120'],
-                            'Flight #': [1234, 5678, 9012],
-                            'Destination': ['LAX', 'ORD', 'MCO'],
-                            'Boarding Start': ['10:00 AM', '12:30 PM', '3:00 PM'],
-                            'Boarding End': ['10:45 AM', '1:15 PM', '3:45 PM'],
-                            'Time Between': ['N/A', '1h 45m', '2h 15m'],
-                            'checkbox': [False, False, False]
+                        all_flights_for_scheduling = df[
+                            (df['Has Equipment'] == 'Yes') &
+                            (df['Est. Boarding Start'].notna()) &
+                            (df['Est. Boarding End'].notna())
+                        ].copy()
+
+                        if 'Important flight?' in all_flights_for_scheduling.columns:
+                            all_flights_for_scheduling['isImportant'] = all_flights_for_scheduling['Important flight?'].apply(lambda x: str(x).strip().lower() == 'yes')
+                        else:
+                            all_flights_for_scheduling['isImportant'] = False
+                            st.warning("Warning: 'Important flight?' column not found in flight data. All flights treated as not important for scheduling.")
+
+                        all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
+                        all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
+
+                        name_to_check = name.strip()
+
+                        is_unassigned = all_flights_for_scheduling['Observers'].str.strip() == ''
+                        is_assigned_to_me = all_flights_for_scheduling['Observers'].str.contains(name_to_check, case=False, na=False)
+                        candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
+
+                        user_start_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=EASTERN_TZ)
+                        user_end_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=EASTERN_TZ)
+
+                        pre_assigned_flights = candidate_flights[
+                            (candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)) &
+                            (candidate_flights['Est. Boarding Start'] >= user_start_timestamp) &
+                            (candidate_flights['Est. Boarding End'] <= user_end_timestamp)
+                        ].copy()
+
+                        pre_assigned_flight_nums = pre_assigned_flights['Flight Num'].tolist()
+                        available_flights_pool = candidate_flights[
+                            ~candidate_flights['Flight Num'].isin(pre_assigned_flight_nums)
+                        ].copy()
+
+                        schedule = []
+                        if not pre_assigned_flights.empty:
+                            pre_assigned_flights = pre_assigned_flights.sort_values(by='Est. Boarding Start')
+                            schedule = pre_assigned_flights.to_dict('records')
+                            st.info(f"Found {len(schedule)} pre-assigned flight(s) for {name.strip()}. Incorporating them into the schedule.")
+
+                        user_observer_state = {
+                            'name': name.strip(),
+                            'startTime': user_start_timestamp,
+                            'endTime': user_end_timestamp,
+                            'schedule': schedule,
+                            'lastFlight': schedule[-1] if schedule else None
                         }
-                        st.session_state.suggested_schedule = pd.DataFrame(sample_data)
-                    st.success("Schedule generated!")
-                    st.rerun()
+
+                        assignments_made_in_round = True
+                        while assignments_made_in_round and not available_flights_pool.empty:
+                            assignments_made_in_round = False
+
+                            potential_next_flights = pd.DataFrame()
+                            current_observer_end_time = user_observer_state['endTime']
+                            last_flight_busy_end = user_observer_state['lastFlight']['busyEnd'] if user_observer_state['lastFlight'] else user_observer_state['startTime']
+                            potential_next_flights = available_flights_pool[
+                                (available_flights_pool['Est. Boarding Start'] >= last_flight_busy_end) &
+                                (available_flights_pool['Est. Boarding End'] <= current_observer_end_time)
+                            ].copy()
+
+                            if not potential_next_flights.empty:
+                                potential_next_flights['downtime'] = potential_next_flights.apply(
+                                    lambda row: (row['busyStart'] - last_flight_busy_end).total_seconds() / 60
+                                    if user_observer_state['lastFlight'] else 0, axis=1
+                                )
+                                potential_next_flights['importance_score'] = potential_next_flights['isImportant'].apply(lambda x: 0 if x else 1)
+                                last_gate_parsed = parse_gate(user_observer_state['lastFlight']['DEP GATE']) if user_observer_state['lastFlight'] else None
+                                potential_next_flights['gate_score'] = potential_next_flights['DEP GATE'].apply(
+                                    lambda gate: (
+                                        abs(parse_gate(gate)['number'] - last_gate_parsed['number']) / 10
+                                        if last_gate_parsed and parse_gate(gate)['concourse'] == last_gate_parsed['concourse']
+                                        else 15
+                                    )
+                                )
+                                potential_next_flights = potential_next_flights.sort_values(
+                                    by=['downtime', 'importance_score', 'gate_score']
+                                )
+
+                                best_choice = potential_next_flights.iloc[0]
+                                user_observer_state['schedule'].append(best_choice.to_dict())
+                                user_observer_state['lastFlight'] = best_choice.to_dict()
+                                available_flights_pool = available_flights_pool[available_flights_pool['Flight Num'] != best_choice['Flight Num']]
+                                assignments_made_in_round = True
+
+                        if user_observer_state['schedule']:
+                            user_observer_state['schedule'].sort(key=lambda f: f['Est. Boarding Start'])
+                            final_output_data = []
+                            headers = ["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between", "Flight_Num_hidden"]
+
+                            previous_flight_end = None
+                            for flight in user_observer_state['schedule']:
+                                time_between = "---"
+                                if previous_flight_end:
+                                    diff_mins = int((flight['Est. Boarding Start'] - previous_flight_end).total_seconds() / 60)
+                                    hours = diff_mins // 60
+                                    mins = diff_mins % 60
+                                    time_between = f"{hours:01d}:{mins:02d}"
+
+                                is_preassigned = not pre_assigned_flights.empty and flight['Flight Num'] in pre_assigned_flights['Flight Num'].values
+
+
+                                final_output_data.append([
+                                    is_preassigned,
+                                    flight['DEP GATE'],
+                                    flight['Flight Num'],
+                                    flight['ARR'],
+                                    flight['Est. Boarding Start'].strftime('%-I:%M %p'),
+                                    flight['Est. Boarding End'].strftime('%-I:%M %p'),
+                                    time_between,
+                                    flight['Flight Num']
+                                ])
+                                previous_flight_end = flight['Est. Boarding End']
+
+                            st.session_state.suggested_schedule = pd.DataFrame(final_output_data, columns=headers)
+                            st.success(f"Here is your suggested schedule:")
+                        else:
+                            st.session_state.suggested_schedule = pd.DataFrame()
+                            st.info("No available flights match your criteria for a suggested schedule.")
+                        st.rerun()
 
             if st.session_state.suggested_schedule is not None and not st.session_state.suggested_schedule.empty:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
-                
-                schedule_df = st.session_state.suggested_schedule.copy()
-                
-                if st.checkbox("Select all flights", key="select_all_checkbox"):
-                    schedule_df['checkbox'] = True
-                
-                edited_df = st.data_editor(
-                    schedule_df,
+
+                select_all = st.checkbox("Select all flights", key="select_all_checkbox")
+
+                schedule_df = st.session_state.suggested_schedule
+                if select_all:
+                    schedule_df["checkbox"] = True
+
+                schedule_list = schedule_df.to_dict('records')
+
+                edited_schedule = st.data_editor(
+                    schedule_list,
+                    column_order=["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
                     column_config={
-                        "checkbox": st.column_config.CheckboxColumn("Sign up?", help="Select flights to sign up for.", default=False),
+                        "checkbox": st.column_config.CheckboxColumn(
+                            "Sign up?",
+                            help="Select flights to sign up for. Pre-assigned flights are selected by default.",
+                            default=False
+                        ),
+                        "Gate": "Gate",
+                        "Flight #": "Flight",
+                        "Destination": "Dest",
+                        "Boarding Start": "Board Start",
+                        "Boarding End": "Board End",
+                        "Time Between": "Time Between",
                         "Flight_Num_hidden": None
                     },
-                    disabled=["Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
                     hide_index=True,
                     use_container_width=True,
                     key="editable_schedule"
                 )
 
-                selected_flights = [row['Flight #'] for i, row in edited_df.iterrows() if row['checkbox']]
+                selected_flights_to_sign_up = [
+                    row['Flight #'] for row in edited_schedule if row['checkbox']
+                ]
 
-                if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True, key='confirm_signup_button'):
+                if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True, key="confirm_and_signup_button"):
                     if not name.strip():
-                        st.warning("Please enter your name above.")
-                    elif not selected_flights:
-                        st.warning("Please select at least one flight.")
+                        st.warning("Please enter your name to sign up for flights.")
+                    elif not selected_flights_to_sign_up:
+                        st.warning("Please select at least one flight to sign up for.")
                     else:
-                        if sign_up_for_flights(name, selected_flights):
+                        if sign_up_for_flights(name, selected_flights_to_sign_up):
                             st.session_state.suggested_schedule = None
                             st.rerun()
+
+            elif st.session_state.suggested_schedule is not None and st.session_state.suggested_schedule.empty:
+                st.info("No available flights match your criteria for a suggested schedule.")
     
     # ==============================================================================
     # --- MODE 3: MANUAL SIGN-UP ---
