@@ -152,16 +152,16 @@ try:
         st.session_state.suggested_schedule = None
 
     col1, col2, col3, col4 = st.columns(4)
-    if col1.button("Today's Flights", use_container_width=True):
+    if col1.button("Today's Flights", use_container_width=True, key='nav_today'):
         st.session_state.mode = "today"
         st.rerun()
-    if col2.button("Suggest My Schedule", use_container_width=True):
+    if col2.button("Suggest My Schedule", use_container_width=True, key='nav_suggest'):
         st.session_state.mode = "suggest"
         st.rerun()
-    if col3.button("Manual Sign-up", use_container_width=True):
+    if col3.button("Manual Sign-up", use_container_width=True, key='nav_signup'):
         st.session_state.mode = "signup"
         st.rerun()
-    if col4.button("View Tracker", use_container_width=True):
+    if col4.button("View Tracker", use_container_width=True, key='nav_tracker'):
         st.session_state.mode = "tracker"
         st.rerun()
     
@@ -265,7 +265,7 @@ try:
             user_start_time = c1.select_slider("Enter your start time:", options=time_options, value=time(9, 0), format_func=lambda t: t.strftime('%-I:%M %p'))
             user_end_time = c2.select_slider("Enter your end time:", options=time_options, value=time(17, 0), format_func=lambda t: t.strftime('%-I:%M %p'))
 
-            if st.button("Suggest My Schedule", use_container_width=True):
+            if st.button("Suggest My Schedule", use_container_width=True, key='suggest_button'):
                 if not name.strip():
                     st.warning("Please enter your name.")
                 else:
@@ -298,7 +298,7 @@ try:
 
                 selected_flights = [row['Flight #'] for i, row in edited_df.iterrows() if row['checkbox']]
 
-                if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True):
+                if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True, key='confirm_signup_button'):
                     if not name.strip():
                         st.warning("Please enter your name above.")
                     elif not selected_flights:
