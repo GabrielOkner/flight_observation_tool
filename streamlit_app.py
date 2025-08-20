@@ -175,12 +175,22 @@ try:
         st.subheader(f"Flights for {current_day_sheet_name}, {today_date.strftime('%B %d')}")
         df = get_sheet_data(gc, current_day_sheet_name)
         if df is not None and not df.empty:
-            # UPDATED: Ensure Est. Boarding Start and ETD exist before filtering
+            # Ensure Est. Boarding Start and ETD exist before filtering
             valid_times_df = df.dropna(subset=['Est. Boarding Start', 'ETD'])
             
             now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
-            # UPDATED: Filter by ETD to show all non-departed flights, but still sort by boarding time
+            # Filter by ETD to show all non-departed flights
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
+
+            # --- NEW CHANGE: Filter out flights where 'Has Equipment' is 'No' ---
+            if 'Has Equipment' in display_df.columns:
+                # Ensure the column is treated as string and handle potential NaN values
+                display_df['Has Equipment'] = display_df['Has Equipment'].astype(str)
+                # Filter is case-insensitive and strips whitespace
+                display_df = display_df[display_df['Has Equipment'].str.strip().str.upper() != 'NO']
+            # --- END OF CHANGE ---
+            
+            # Sort the remaining flights by boarding time
             display_df = display_df.sort_values(by="Est. Boarding Start")
 
 
@@ -209,7 +219,7 @@ try:
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
 
-                # UPDATED: Color function now highlights flights that are currently boarding in red
+                # Color function now highlights flights that are currently boarding in red
                 def color_scale_time_to_board(row):
                     minutes = row['Time to Board']
                     style = ''
