@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo # <-- CORRECTED: Import ZoneInfo
 import numpy as np
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Flight Observer", layout="wide")
-st.title("Flight Observation Tool")
+st.set_page_config(page_title="ORD Flight Observer", layout="wide")
+st.title("ORD Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
