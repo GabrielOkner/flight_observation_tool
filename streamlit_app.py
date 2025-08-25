@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, time, timedelta
-from zoneinfo import ZoneInfo # <-- CORRECTED: Import ZoneInfo
+from zoneinfo import ZoneInfo
 import numpy as np
 
 # --- Page Configuration ---
@@ -12,7 +12,6 @@ st.title("ORD Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
-# Correctly define the timezone using the imported ZoneInfo
 CHICAGO_TZ = ZoneInfo("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
@@ -48,34 +47,32 @@ def get_sheet_data(_gc, sheet_name):
 
         df = pd.DataFrame(data)
         df.columns = df.columns.str.strip()
-        
-        # Use numpy's NaN for consistency
         df.replace("", np.nan, inplace=True)
 
+        # --- REVISED TIME PARSING LOGIC ---
         def parse_and_localize_time(series):
             """
-            Converts a series of time strings to localized datetime objects.
-            This is now more robust against mixed data types from the sheet.
+            Converts a series of time strings to localized datetime objects in a more robust way.
             """
-            # Ensure all data is treated as a string before parsing
             str_series = pd.Series(series, dtype=str).str.strip()
             times = pd.to_datetime(str_series, errors='coerce').dt.time
-            today_date = datetime.now(CHICAGO_TZ).date()
             
-            # Combine the date with the parsed time and then localize
+            # Get a timezone-aware timestamp for the beginning of today in Chicago
+            today_aware = datetime.now(CHICAGO_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # For each valid time from the sheet, replace the time components of our aware 'today' object
             valid_datetimes = [
-                datetime.combine(today_date, t) if pd.notna(t) else pd.NaT
+                today_aware.replace(hour=t.hour, minute=t.minute, second=t.second) if pd.notna(t) else pd.NaT
                 for t in times
             ]
-            # Convert to a timezone-aware pandas DatetimeIndex
-            return pd.to_datetime(valid_datetimes).tz_localize(CHICAGO_TZ, ambiguous='infer')
+            return pd.to_datetime(valid_datetimes, errors='coerce')
 
         if sheet_name != 'Scheduler':
             time_cols = ['Est. Boarding Start', 'Est. Boarding End', 'ETD']
             for col in time_cols:
                 if col in df.columns:
                     df[col] = parse_and_localize_time(df[col])
-        else: # Handle the 'Scheduler' sheet
+        else:
             time_cols = ['Start Time', 'End Time']
             for col in time_cols:
                 if col in df.columns:
@@ -181,32 +178,27 @@ try:
         st.subheader(f"Flights for {current_day_sheet_name}, {today_date.strftime('%B %d')}")
         df = get_sheet_data(gc, current_day_sheet_name)
         if df is not None and not df.empty:
-            # Ensure Est. Boarding Start and ETD exist before filtering
             valid_times_df = df.dropna(subset=['Est. Boarding Start', 'ETD'])
             
             now_datetime = pd.Timestamp.now(tz=CHICAGO_TZ)
-            # Filter by ETD to show all non-departed flights
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
-            # Filter out flights where 'Has Equipment' is 'No'
             if 'Has Equipment' in display_df.columns:
                 display_df['Has Equipment'] = display_df['Has Equipment'].astype(str)
                 display_df = display_df[display_df['Has Equipment'].str.strip().str.upper() != 'NO']
             
-            # Sort the remaining flights by boarding time
             display_df = display_df.sort_values(by="Est. Boarding Start")
-
 
             if not display_df.empty:
                 if 'Observers' in display_df.columns:
                     display_df['Observers'] = display_df['Observers'].fillna('').astype(str).replace('None', '')
 
-                display_df['minutes_to_board'] = ((display_df['Est. Boarding Start'] - now_datetime).dt.total_seconds() / 60)
+                # --- REVISED: Calculate and round minutes immediately ---
+                display_df['minutes_to_board'] = ((display_df['Est. Boarding Start'] - now_datetime).dt.total_seconds() / 60).round()
 
                 def format_timedelta(minutes):
                     if pd.isna(minutes):
                         return "N/A"
-                    # Handle negative time for display
                     if minutes < 0:
                         return f"Boarding"
                     hours, remainder_minutes = divmod(int(minutes), 60)
@@ -220,33 +212,27 @@ try:
                 }
                 
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
-                # Add minutes_to_board to the front if it's not already there
                 if 'minutes_to_board' not in actual_cols:
                     actual_cols.insert(0, 'minutes_to_board')
                     
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
 
-                # Color function now highlights flights that are currently boarding in red
                 def color_scale_time_to_board(row):
                     minutes_val = row['Time to Board']
                     style = ''
-                    # Check if minutes_val is a number before comparing
-                    if isinstance(minutes_val, (int, float)):
-                        if minutes_val <= 0: # Boarding has started or passed
+                    if pd.notna(minutes_val):
+                        if minutes_val <= 0:
                             style = 'background-color: #FFADAD; color: black;'
-                        elif minutes_val <= 15: # Boarding very soon
+                        elif minutes_val <= 15:
                             style = 'background-color: #FFD6A5; color: black;'
-                        elif minutes_val <= 30: # Boarding soon
+                        elif minutes_val <= 30:
                             style = 'background-color: #FDFFB6; color: black;'
-                        else: # Boarding later
+                        else:
                             style = 'background-color: #CAFFBF; color: black;'
                     return [style] * len(row)
 
-                # Temporarily convert minutes to integer for styling, then format
-                styler_df = final_display_df.copy()
-                styler_df['Time to Board'] = pd.to_numeric(display_df['minutes_to_board'], errors='coerce')
-                
-                styler = styler_df.style.apply(color_scale_time_to_board, axis=1)
+                # --- REVISED: Simplified styling logic ---
+                styler = final_display_df.style.apply(color_scale_time_to_board, axis=1)
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
@@ -428,7 +414,6 @@ try:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
 
-                # Use a separate key for the name input in this section
                 confirm_name = st.text_input("Confirm your name for sign-up:", value=st.session_state.get('suggest_name', ''), key="confirm_name")
 
                 schedule_df = st.session_state.suggested_schedule
@@ -483,7 +468,6 @@ try:
             if df is not None and not df.empty:
                 st.info("Click on a flight to sign up.")
                 
-                # Sort flights by ETD for a more logical order
                 df_sorted = df.sort_values(by='ETD').reset_index()
 
                 for _, row in df_sorted.iterrows():
@@ -514,18 +498,15 @@ try:
             
             if not df_flights.empty and 'Observers' in df_flights.columns:
                 
-                # Create a clean 'Observers' list for each flight
                 df_flights['Observer_List'] = df_flights['Observers'].fillna('').astype(str).apply(
                     lambda x: [name.strip() for name in x.split(',') if name.strip()]
                 )
 
                 tracker_data = []
                 for name in observer_names:
-                    # Find all flights this observer is signed up for
                     assigned_flights = df_flights[df_flights['Observer_List'].apply(lambda lst: name in lst)]
                     flight_count = len(assigned_flights)
                     
-                    # Get the observer's schedule from the Scheduler sheet
                     observer_schedule = df_scheduler[df_scheduler['Observer Name'] == name]
                     start_time = observer_schedule['Start Time'].iloc[0] if not observer_schedule.empty else pd.NaT
                     end_time = observer_schedule['End Time'].iloc[0] if not observer_schedule.empty else pd.NaT
@@ -539,7 +520,6 @@ try:
                 
                 tracker_df = pd.DataFrame(tracker_data)
 
-                # Format the time columns for display
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else 'N/A'
                 tracker_df['Scheduled Start'] = tracker_df['Scheduled Start'].apply(time_format)
                 tracker_df['Scheduled End'] = tracker_df['Scheduled End'].apply(time_format)
@@ -554,6 +534,6 @@ try:
 
 except Exception as e:
     st.error(f"A critical error occurred in the application: {e}")
-    st.exception(e) # This will print the full traceback for debugging
+    st.exception(e)
     st.info("Please check your Google Sheet permissions and ensure the sheet format is correct.")
 
