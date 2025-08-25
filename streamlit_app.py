@@ -52,20 +52,24 @@ def get_sheet_data(_gc, sheet_name):
         # --- REVISED TIME PARSING LOGIC ---
         def parse_and_localize_time(series):
             """
-            Converts a series of time strings to localized datetime objects in a more robust way.
+            Converts a series of time strings to localized datetime objects in a more robust way
+            that avoids Daylight Saving Time ambiguity.
             """
             str_series = pd.Series(series, dtype=str).str.strip()
             times = pd.to_datetime(str_series, errors='coerce').dt.time
             
-            # Get a timezone-aware timestamp for the beginning of today in Chicago
-            today_aware = datetime.now(CHICAGO_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+            # Get today's date naively
+            today_naive_date = datetime.now().date()
             
-            # For each valid time from the sheet, replace the time components of our aware 'today' object
-            valid_datetimes = [
-                today_aware.replace(hour=t.hour, minute=t.minute, second=t.second) if pd.notna(t) else pd.NaT
+            # Combine with time to create a naive datetime object
+            naive_datetimes = [
+                datetime.combine(today_naive_date, t) if pd.notna(t) else pd.NaT
                 for t in times
             ]
-            return pd.to_datetime(valid_datetimes, errors='coerce')
+            
+            # Convert to a pandas Series and then localize the entire series.
+            # This is the most reliable way to handle DST.
+            return pd.to_datetime(pd.Series(naive_datetimes)).dt.tz_localize(CHICAGO_TZ, ambiguous='infer')
 
         if sheet_name != 'Scheduler':
             time_cols = ['Est. Boarding Start', 'Est. Boarding End', 'ETD']
@@ -193,7 +197,6 @@ try:
                 if 'Observers' in display_df.columns:
                     display_df['Observers'] = display_df['Observers'].fillna('').astype(str).replace('None', '')
 
-                # --- REVISED: Calculate and round minutes immediately ---
                 display_df['minutes_to_board'] = ((display_df['Est. Boarding Start'] - now_datetime).dt.total_seconds() / 60).round()
 
                 def format_timedelta(minutes):
@@ -231,7 +234,6 @@ try:
                             style = 'background-color: #CAFFBF; color: black;'
                     return [style] * len(row)
 
-                # --- REVISED: Simplified styling logic ---
                 styler = final_display_df.style.apply(color_scale_time_to_board, axis=1)
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
@@ -309,9 +311,12 @@ try:
                         is_unassigned = observers_series.str.strip() == ''
                         is_assigned_to_me = observers_series.str.contains(name_to_check, case=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
+                        
+                        # --- REVISED: Safer way to create timezone-aware timestamps ---
+                        today_aware_start = today_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                        user_start_timestamp = today_aware_start.replace(hour=user_start_time.hour, minute=user_start_time.minute)
+                        user_end_timestamp = today_aware_start.replace(hour=user_end_time.hour, minute=user_end_time.minute)
 
-                        user_start_timestamp = CHICAGO_TZ.localize(datetime.combine(today_date.date(), user_start_time))
-                        user_end_timestamp = CHICAGO_TZ.localize(datetime.combine(today_date.date(), user_end_time))
 
                         pre_assigned_flights = candidate_flights[
                             (candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)) &
