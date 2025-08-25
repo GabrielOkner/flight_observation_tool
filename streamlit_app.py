@@ -3,8 +3,8 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, time, timedelta
-import pytz
-import numpy as np # Import numpy for more robust NaN handling
+from zoneinfo import ZoneInfo # <-- CORRECTED: Import ZoneInfo
+import numpy as np
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Flight Observer", layout="wide")
@@ -12,6 +12,7 @@ st.title("Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
+# Correctly define the timezone using the imported ZoneInfo
 CHICAGO_TZ = ZoneInfo("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
@@ -30,7 +31,7 @@ def authorize_gspread():
     return gspread.authorize(creds)
 
 
-# UPDATED: Removed the @st.cache_data decorator to force a refresh every time.
+# Removed the @st.cache_data decorator to force a refresh every time.
 def get_sheet_data(_gc, sheet_name):
     """
     Fetch and process data for a given sheet name.
@@ -48,6 +49,7 @@ def get_sheet_data(_gc, sheet_name):
         df = pd.DataFrame(data)
         df.columns = df.columns.str.strip()
         
+        # Use numpy's NaN for consistency
         df.replace("", np.nan, inplace=True)
 
         def parse_and_localize_time(series):
@@ -55,21 +57,25 @@ def get_sheet_data(_gc, sheet_name):
             Converts a series of time strings to localized datetime objects.
             This is now more robust against mixed data types from the sheet.
             """
+            # Ensure all data is treated as a string before parsing
             str_series = pd.Series(series, dtype=str).str.strip()
             times = pd.to_datetime(str_series, errors='coerce').dt.time
             today_date = datetime.now(CHICAGO_TZ).date()
+            
+            # Combine the date with the parsed time and then localize
             valid_datetimes = [
-                CHICAGO_TZ.localize(datetime.combine(today_date, t)) if pd.notna(t) else pd.NaT
+                datetime.combine(today_date, t) if pd.notna(t) else pd.NaT
                 for t in times
             ]
-            return pd.to_datetime(valid_datetimes, errors='coerce')
+            # Convert to a timezone-aware pandas DatetimeIndex
+            return pd.to_datetime(valid_datetimes).tz_localize(CHICAGO_TZ, ambiguous='infer')
 
         if sheet_name != 'Scheduler':
             time_cols = ['Est. Boarding Start', 'Est. Boarding End', 'ETD']
             for col in time_cols:
                 if col in df.columns:
                     df[col] = parse_and_localize_time(df[col])
-        else:
+        else: # Handle the 'Scheduler' sheet
             time_cols = ['Start Time', 'End Time']
             for col in time_cols:
                 if col in df.columns:
@@ -182,13 +188,10 @@ try:
             # Filter by ETD to show all non-departed flights
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
-            # --- NEW CHANGE: Filter out flights where 'Has Equipment' is 'No' ---
+            # Filter out flights where 'Has Equipment' is 'No'
             if 'Has Equipment' in display_df.columns:
-                # Ensure the column is treated as string and handle potential NaN values
                 display_df['Has Equipment'] = display_df['Has Equipment'].astype(str)
-                # Filter is case-insensitive and strips whitespace
                 display_df = display_df[display_df['Has Equipment'].str.strip().str.upper() != 'NO']
-            # --- END OF CHANGE ---
             
             # Sort the remaining flights by boarding time
             display_df = display_df.sort_values(by="Est. Boarding Start")
@@ -198,7 +201,7 @@ try:
                 if 'Observers' in display_df.columns:
                     display_df['Observers'] = display_df['Observers'].fillna('').astype(str).replace('None', '')
 
-                display_df['minutes_to_board'] = ((display_df['Est. Boarding Start'] - now_datetime).dt.total_seconds() / 60).round(0)
+                display_df['minutes_to_board'] = ((display_df['Est. Boarding Start'] - now_datetime).dt.total_seconds() / 60)
 
                 def format_timedelta(minutes):
                     if pd.isna(minutes):
@@ -217,24 +220,33 @@ try:
                 }
                 
                 actual_cols = [col for col in cols_to_display if col in display_df.columns]
+                # Add minutes_to_board to the front if it's not already there
+                if 'minutes_to_board' not in actual_cols:
+                    actual_cols.insert(0, 'minutes_to_board')
+                    
                 final_display_df = display_df[actual_cols].rename(columns=cols_to_display)
 
                 # Color function now highlights flights that are currently boarding in red
                 def color_scale_time_to_board(row):
-                    minutes = row['Time to Board']
+                    minutes_val = row['Time to Board']
                     style = ''
-                    if pd.notna(minutes):
-                        if minutes <= 0: # Boarding has started or passed
+                    # Check if minutes_val is a number before comparing
+                    if isinstance(minutes_val, (int, float)):
+                        if minutes_val <= 0: # Boarding has started or passed
                             style = 'background-color: #FFADAD; color: black;'
-                        elif minutes <= 15: # Boarding very soon
+                        elif minutes_val <= 15: # Boarding very soon
                             style = 'background-color: #FFD6A5; color: black;'
-                        elif minutes <= 30: # Boarding soon
+                        elif minutes_val <= 30: # Boarding soon
                             style = 'background-color: #FDFFB6; color: black;'
                         else: # Boarding later
                             style = 'background-color: #CAFFBF; color: black;'
                     return [style] * len(row)
 
-                styler = final_display_df.style.apply(color_scale_time_to_board, axis=1)
+                # Temporarily convert minutes to integer for styling, then format
+                styler_df = final_display_df.copy()
+                styler_df['Time to Board'] = pd.to_numeric(display_df['minutes_to_board'], errors='coerce')
+                
+                styler = styler_df.style.apply(color_scale_time_to_board, axis=1)
                 
                 time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else ''
                 styler = styler.format({
@@ -291,7 +303,7 @@ try:
                 else:
                     with st.spinner("Generating suggested schedule..."):
                         all_flights_for_scheduling = df[
-                            (df['Has Equipment'] == 'Yes') &
+                            (df['Has Equipment'].astype(str).str.strip().str.upper() == 'YES') &
                             (df['Est. Boarding Start'].notna()) &
                             (df['Est. Boarding End'].notna())
                         ].copy()
@@ -300,21 +312,20 @@ try:
                             all_flights_for_scheduling['isImportant'] = all_flights_for_scheduling['Important flight?'].apply(lambda x: str(x).strip().lower() == 'yes')
                         else:
                             all_flights_for_scheduling['isImportant'] = False
-                            st.warning("Warning: 'Important flight?' column not found in flight data. All flights treated as not important for scheduling.")
+                            st.warning("Warning: 'Important flight?' column not found. All flights treated as not important.")
 
                         all_flights_for_scheduling['busyStart'] = all_flights_for_scheduling['Est. Boarding Start'] - timedelta(minutes=10)
                         all_flights_for_scheduling['busyEnd'] = all_flights_for_scheduling['Est. Boarding End'] + timedelta(minutes=10)
 
                         name_to_check = name.strip()
 
-                        # Correctly identify unassigned flights by handling NaN values
                         observers_series = all_flights_for_scheduling['Observers'].fillna('')
                         is_unassigned = observers_series.str.strip() == ''
                         is_assigned_to_me = observers_series.str.contains(name_to_check, case=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
 
-                        user_start_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=CHICAGO_TZ)
-                        user_end_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=CHICAGO_TZ)
+                        user_start_timestamp = CHICAGO_TZ.localize(datetime.combine(today_date.date(), user_start_time))
+                        user_end_timestamp = CHICAGO_TZ.localize(datetime.combine(today_date.date(), user_end_time))
 
                         pre_assigned_flights = candidate_flights[
                             (candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)) &
@@ -345,12 +356,12 @@ try:
                         while assignments_made_in_round and not available_flights_pool.empty:
                             assignments_made_in_round = False
 
-                            potential_next_flights = pd.DataFrame()
                             current_observer_end_time = user_observer_state['endTime']
                             last_flight_busy_end = user_observer_state['lastFlight']['busyEnd'] if user_observer_state['lastFlight'] else user_observer_state['startTime']
+                            
                             potential_next_flights = available_flights_pool[
-                                (available_flights_pool['Est. Boarding Start'] >= last_flight_busy_end) &
-                                (available_flights_pool['Est. Boarding End'] <= current_observer_end_time)
+                                (available_flights_pool['busyStart'] >= last_flight_busy_end) &
+                                (available_flights_pool['busyEnd'] <= current_observer_end_time)
                             ].copy()
 
                             if not potential_next_flights.empty:
@@ -417,22 +428,17 @@ try:
                 st.markdown("---")
                 st.subheader("Review and Confirm Your Schedule")
 
-                select_all = st.checkbox("Select all flights", key="select_all_checkbox")
+                # Use a separate key for the name input in this section
+                confirm_name = st.text_input("Confirm your name for sign-up:", value=st.session_state.get('suggest_name', ''), key="confirm_name")
 
                 schedule_df = st.session_state.suggested_schedule
-                if select_all:
-                    schedule_df["checkbox"] = True
-
-                schedule_list = schedule_df.to_dict('records')
-
+                
                 edited_schedule = st.data_editor(
-                    schedule_list,
-                    column_order=["checkbox", "Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
+                    schedule_df,
                     column_config={
                         "checkbox": st.column_config.CheckboxColumn(
                             "Sign up?",
                             help="Select flights to sign up for. Pre-assigned flights are selected by default.",
-                            default=False
                         ),
                         "Gate": "Gate",
                         "Flight #": "Flight",
@@ -442,22 +448,23 @@ try:
                         "Time Between": "Time Between",
                         "Flight_Num_hidden": None
                     },
+                    disabled=["Gate", "Flight #", "Destination", "Boarding Start", "Boarding End", "Time Between"],
                     hide_index=True,
                     use_container_width=True,
                     key="editable_schedule"
                 )
 
                 selected_flights_to_sign_up = [
-                    row['Flight #'] for row in edited_schedule if row['checkbox']
+                    row['Flight_Num_hidden'] for row in edited_schedule if row['checkbox']
                 ]
 
                 if st.button("Confirm & Sign Up for Selected Flights", use_container_width=True, key="confirm_and_signup_button"):
-                    if not name.strip():
-                        st.warning("Please enter your name to sign up for flights.")
+                    if not confirm_name.strip():
+                        st.warning("Please confirm your name to sign up for flights.")
                     elif not selected_flights_to_sign_up:
                         st.warning("Please select at least one flight to sign up for.")
                     else:
-                        if sign_up_for_flights(name, selected_flights_to_sign_up):
+                        if sign_up_for_flights(confirm_name, selected_flights_to_sign_up):
                             st.session_state.suggested_schedule = None
                             st.rerun()
 
@@ -475,14 +482,18 @@ try:
             df = get_sheet_data(gc, current_day_sheet_name)
             if df is not None and not df.empty:
                 st.info("Click on a flight to sign up.")
-                for _, row in df.iterrows():
+                
+                # Sort flights by ETD for a more logical order
+                df_sorted = df.sort_values(by='ETD').reset_index()
+
+                for _, row in df_sorted.iterrows():
                     etd_str = row['ETD'].strftime('%-I:%M %p') if pd.notna(row['ETD']) else "No ETD"
                     flight_label = (
                         f"{row.get('CARR (IATA)', '')} {row.get('Flight Num', '')} | "
                         f"Gate {row.get('DEP GATE', 'N/A')} | {etd_str} → {row.get('ARR', '')} | "
-                        f"Observers: {row.get('Observers', '')}"
+                        f"Observers: {row.get('Observers', '') or 'None'}"
                     )
-                    if st.button(flight_label, key=f"manual_{row.get('Flight Num', _)}_{_}"):
+                    if st.button(flight_label, key=f"manual_{row.get('Flight Num', _)}"):
                         if sign_up_for_flights(name, [row['Flight Num']]):
                             st.rerun()
             else:
@@ -495,10 +506,54 @@ try:
     # ==============================================================================
     elif st.session_state.mode == "tracker":
         st.subheader("Observer Sign-Up Tracker")
-        # (The user's tracker logic is preserved as it was mostly correct)
-        ...
+        df_flights = get_sheet_data(gc, current_day_sheet_name)
+        df_scheduler = get_sheet_data(gc, 'Scheduler')
+
+        if not df_scheduler.empty and 'Observer Name' in df_scheduler.columns:
+            observer_names = df_scheduler['Observer Name'].dropna().unique()
+            
+            if not df_flights.empty and 'Observers' in df_flights.columns:
+                
+                # Create a clean 'Observers' list for each flight
+                df_flights['Observer_List'] = df_flights['Observers'].fillna('').astype(str).apply(
+                    lambda x: [name.strip() for name in x.split(',') if name.strip()]
+                )
+
+                tracker_data = []
+                for name in observer_names:
+                    # Find all flights this observer is signed up for
+                    assigned_flights = df_flights[df_flights['Observer_List'].apply(lambda lst: name in lst)]
+                    flight_count = len(assigned_flights)
+                    
+                    # Get the observer's schedule from the Scheduler sheet
+                    observer_schedule = df_scheduler[df_scheduler['Observer Name'] == name]
+                    start_time = observer_schedule['Start Time'].iloc[0] if not observer_schedule.empty else pd.NaT
+                    end_time = observer_schedule['End Time'].iloc[0] if not observer_schedule.empty else pd.NaT
+
+                    tracker_data.append({
+                        "Observer": name,
+                        "Flights Signed Up": flight_count,
+                        "Scheduled Start": start_time,
+                        "Scheduled End": end_time
+                    })
+                
+                tracker_df = pd.DataFrame(tracker_data)
+
+                # Format the time columns for display
+                time_format = lambda t: t.strftime('%-I:%M %p') if pd.notna(t) else 'N/A'
+                tracker_df['Scheduled Start'] = tracker_df['Scheduled Start'].apply(time_format)
+                tracker_df['Scheduled End'] = tracker_df['Scheduled End'].apply(time_format)
+
+                st.dataframe(tracker_df, hide_index=True, use_container_width=True)
+
+            else:
+                st.warning("Could not find 'Observers' column in today's flight sheet to build the tracker.")
+        else:
+            st.warning("Could not find 'Observer Name' column in the 'Scheduler' sheet.")
 
 
 except Exception as e:
     st.error(f"A critical error occurred in the application: {e}")
+    st.exception(e) # This will print the full traceback for debugging
     st.info("Please check your Google Sheet permissions and ensure the sheet format is correct.")
+
