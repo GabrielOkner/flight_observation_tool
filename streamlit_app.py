@@ -12,7 +12,7 @@ st.title("EWR Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
-EASTERN_TZ = pytz.timezone("America/New_York")
+EASTERN_TZ = pytz.timezone("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
 
