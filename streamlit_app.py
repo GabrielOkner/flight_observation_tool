@@ -8,11 +8,11 @@ import numpy as np # Import numpy for more robust NaN handling
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Flight Observer", layout="wide")
-st.title("EWR Flight Observation Tool")
+st.title("Flight Observation Tool")
 
 
 # --- Constants and Timezone ---
-EASTERN_TZ = pytz.timezone("America/Chicago")
+CHICAGO_TZ = ZoneInfo("America/Chicago")
 SHEET_URL = "https://docs.google.com/spreadsheets/d/109xeylSzvDEMTRjqYTllbzj3nElbfVCTSzZxfn4caBQ/edit?usp=sharing"
 
 
@@ -57,9 +57,9 @@ def get_sheet_data(_gc, sheet_name):
             """
             str_series = pd.Series(series, dtype=str).str.strip()
             times = pd.to_datetime(str_series, errors='coerce').dt.time
-            today_date = datetime.now(EASTERN_TZ).date()
+            today_date = datetime.now(CHICAGO_TZ).date()
             valid_datetimes = [
-                EASTERN_TZ.localize(datetime.combine(today_date, t)) if pd.notna(t) else pd.NaT
+                CHICAGO_TZ.localize(datetime.combine(today_date, t)) if pd.notna(t) else pd.NaT
                 for t in times
             ]
             return pd.to_datetime(valid_datetimes, errors='coerce')
@@ -100,7 +100,7 @@ def parse_gate(gate):
 def sign_up_for_flights(name, flights_to_sign_up):
     """Signs the specified observer up for a list of flights."""
     gc = authorize_gspread()
-    sheet_name = datetime.now(EASTERN_TZ).strftime("%A")
+    sheet_name = datetime.now(CHICAGO_TZ).strftime("%A")
     master_sheet = gc.open_by_url(SHEET_URL)
     sheet_to_update = master_sheet.worksheet(sheet_name)
     
@@ -165,7 +165,7 @@ try:
         st.session_state.mode = "tracker"
         st.rerun()
     
-    today_date = datetime.now(EASTERN_TZ)
+    today_date = datetime.now(CHICAGO_TZ)
     current_day_sheet_name = today_date.strftime("%A")
 
     # ==============================================================================
@@ -178,7 +178,7 @@ try:
             # Ensure Est. Boarding Start and ETD exist before filtering
             valid_times_df = df.dropna(subset=['Est. Boarding Start', 'ETD'])
             
-            now_datetime = pd.Timestamp.now(tz=EASTERN_TZ)
+            now_datetime = pd.Timestamp.now(tz=CHICAGO_TZ)
             # Filter by ETD to show all non-departed flights
             display_df = valid_times_df[valid_times_df["ETD"] >= now_datetime].copy()
 
@@ -313,8 +313,8 @@ try:
                         is_assigned_to_me = observers_series.str.contains(name_to_check, case=False)
                         candidate_flights = all_flights_for_scheduling[is_unassigned | is_assigned_to_me].copy()
 
-                        user_start_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=EASTERN_TZ)
-                        user_end_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=EASTERN_TZ)
+                        user_start_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_start_time), tz=CHICAGO_TZ)
+                        user_end_timestamp = pd.Timestamp(datetime.combine(today_date.date(), user_end_time), tz=CHICAGO_TZ)
 
                         pre_assigned_flights = candidate_flights[
                             (candidate_flights['Observers'].str.contains(name_to_check, case=False, na=False)) &
